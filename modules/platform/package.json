@@ -1,0 +1,7 @@
+{
+  "name": "@sdris/platform",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/public/index.ts",
+  "types": "src/public/index.ts"
+}
