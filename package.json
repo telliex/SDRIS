@@ -10,7 +10,7 @@
     "dev": "pnpm --parallel --filter @sdris/web --filter @sdris/api --filter @sdris/worker dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "node --test tests/bootstrap/*.test.mjs",
+    "test": "node --test tests/bootstrap/*.test.mjs && pnpm -r --if-present test",
     "check:structure": "node scripts/verify-workspace.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -16,22 +16,34 @@
 
 Node.js 22 LTS, pnpm 9.15.9 via Corepack. Docker will be required from S0-04 onward.
 
-## Install and verify (on a machine with package registry access)
+## Local setup
 
 ```sh
 corepack enable
 corepack prepare pnpm@9.15.9 --activate
 pnpm install
-pnpm check:structure
-pnpm test
-pnpm typecheck
-pnpm build
+cp .env.example .env.local   # optional; synthetic values only
 pnpm dev
 ```
 
-Visit http://localhost:3000 and http://localhost:4000/health/live after starting the apps.
+- Web: http://localhost:3000
+- API liveness: http://localhost:4000/health/live (returns `{"status":"ok"}`)
+- Worker: logs a startup line and idles; it processes no jobs yet.
 
-**Do not treat the scaffold as validated runtime:** installation, compilation, builds and startup must pass in your environment.
+## Workspace scripts
+
+| Script                 | Purpose                                               |
+| ---------------------- | ----------------------------------------------------- |
+| `pnpm dev`             | Run web, api and worker in watch mode                 |
+| `pnpm build`           | Build every workspace that defines a build            |
+| `pnpm typecheck`       | Type-check apps, modules and shared packages          |
+| `pnpm lint`            | ESLint (`pnpm lint:fix` to auto-fix)                  |
+| `pnpm format`          | Prettier write (`pnpm format:check` to verify)        |
+| `pnpm test`            | Workspace structure test plus API `/health/live` test |
+| `pnpm check:structure` | Verify expected apps, modules and public entry points |
+
+Run a single workspace with `pnpm --filter @sdris/api <script>`. Add dependencies to a
+specific workspace the same way (`pnpm --filter @sdris/api add <pkg>`), not at the root.
 
 ## Local safety
 
