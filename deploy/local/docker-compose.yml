@@ -1,0 +1,27 @@
+# Local development PostgreSQL for SDRIS (synthetic data only).
+# Host port defaults to 5432; set SDRIS_POSTGRES_PORT to use another port if 5432 is taken.
+name: sdris-local
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: sdris-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sdris_local
+      POSTGRES_PASSWORD: sdris_local
+      POSTGRES_DB: sdris_local
+    ports:
+      # Bound to loopback only: the development database is never exposed to the network.
+      - '127.0.0.1:${SDRIS_POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - sdris_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U sdris_local -d sdris_local']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  sdris_pgdata:
+    name: sdris_pgdata

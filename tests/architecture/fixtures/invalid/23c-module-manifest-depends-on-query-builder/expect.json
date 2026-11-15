@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/manifest",
+      "file": "modules/evidence/package.json"
+    }
+  ]
+}

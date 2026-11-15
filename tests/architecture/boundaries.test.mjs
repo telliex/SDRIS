@@ -74,7 +74,7 @@ test('diagnostics identify importing file, line, specifier, target package and r
 test('the real repository complies and the command runs from a clean checkout', () => {
   const cli = runCli([]);
   assert.equal(cli.status, 0, cli.stdout + cli.stderr);
-  assert.match(cli.stdout, /PASS: architecture boundaries hold \(16 packages/);
+  assert.match(cli.stdout, /PASS: architecture boundaries hold \(17 packages/);
   const { violations } = checkArchitecture({ root: repoRoot });
   assert.deepEqual(violations, []);
 });

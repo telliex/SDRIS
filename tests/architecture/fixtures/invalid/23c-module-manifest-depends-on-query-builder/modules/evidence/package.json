@@ -1,0 +1,8 @@
+{
+  "name": "@sdris/evidence",
+  "main": "src/public/index.ts",
+  "types": "src/public/index.ts",
+  "dependencies": {
+    "kysely": "^0.29.0"
+  }
+}
