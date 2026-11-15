@@ -107,6 +107,11 @@ Files live in `infrastructure/database/migrations/` as `NNNN_snake_case.sql`.
   `OUT_OF_ORDER`. Fix by restoring the file and adding a new numbered migration.
 - A session advisory lock serialises concurrent runners, so racing or repeated runs are safe.
 - A failing script is rolled back, nothing is recorded, and the CLI exits non-zero naming the file and the database error.
+- **Scripts must not contain their own transaction control** (`BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`,
+  `ABORT`, `PREPARE TRANSACTION`). A script that committed early would leave its changes applied but unrecorded if
+  anything later failed. Such files are rejected with `TRANSACTION_CONTROL` when scripts are loaded, before any script
+  runs (also by `db:status`). `SAVEPOINT`, `ROLLBACK TO` and `RELEASE` are allowed. Detection is a lexical scan that
+  ignores comments, strings, quoted identifiers and dollar-quoted bodies; it is not a SQL parser.
 - Scripts therefore cannot contain statements that refuse to run in a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`).
   A task needing one must raise it for review.
 - No migration is ever run automatically against a shared database; there is no production migration path in Sprint 0.

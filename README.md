@@ -74,7 +74,7 @@ pnpm db:down      # stop; data survives in the volume
 - Add a migration: create `infrastructure/database/migrations/NNNN_description.sql` (next number), run `pnpm db:migrate`.
   Never edit a migration after it is applied or merged; add a new one.
 - Troubleshooting: "Cannot connect to PostgreSQL" means the container is not running (`pnpm db:up`); `CHECKSUM_MISMATCH`
-  means an applied migration file was edited (restore it); `port is already allocated` means 5432 is in use.
+  means an applied migration file was edited (restore it); `port is already allocated` means 5432 is in use. `TRANSACTION_CONTROL` means a migration contains `BEGIN`/`COMMIT`/`ROLLBACK`; remove it (the runner already wraps each file in a transaction).
 - Security: credentials are synthetic and local; the container listens on loopback only. Do not point these commands at
   shared or production databases.
 

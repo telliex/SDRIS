@@ -181,6 +181,44 @@ describe('migrations against real PostgreSQL', () => {
     );
   });
 
+  it('rejects a script that commits on its own, before anything is applied', async () => {
+    // Regression: `COMMIT` inside a script ended the runner's transaction, so a later failure left
+    // the schema change in place with no tracking row (non-atomic).
+    const dir = scratchMigrations({
+      '0002_commits_early.sql':
+        'create schema committed_early;\ncommit;\nselect * from table_that_does_not_exist;',
+    });
+    assert.equal(
+      await codeOf(applyScripts(target.connection.pool, 'migration', dir)),
+      'TRANSACTION_CONTROL',
+    );
+    assert.equal(
+      (await q(`select count(*)::int as n from pg_namespace where nspname='committed_early'`))[0].n,
+      0,
+    );
+    assert.equal(
+      (await q(`select count(*)::int as n from system.schema_migrations where version='0002'`))[0]
+        .n,
+      0,
+    );
+  });
+
+  it('does not run an earlier valid script when a later one is rejected', async () => {
+    const dir = scratchMigrations({
+      '0002_fine.sql': 'create schema fine_but_blocked;',
+      '0003_rollback_inside.sql': 'create schema x_rb; rollback;',
+    });
+    assert.equal(
+      await codeOf(applyScripts(target.connection.pool, 'migration', dir)),
+      'TRANSACTION_CONTROL',
+    );
+    assert.equal(
+      (await q(`select count(*)::int as n from pg_namespace where nspname='fine_but_blocked'`))[0]
+        .n,
+      0,
+    );
+  });
+
   it('serialises concurrent runners: each script is applied exactly once', async () => {
     const fresh = await createIsolatedDatabase();
     try {
