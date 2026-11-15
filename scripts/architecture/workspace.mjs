@@ -56,7 +56,7 @@ function readEntrypoints(dir, manifest) {
 
 export function loadWorkspace(root) {
   const packages = [];
-  for (const group of ['apps', 'modules', 'packages']) {
+  for (const group of ['apps', 'modules', 'packages', 'infrastructure']) {
     const groupDir = path.join(root, group);
     if (!existsSync(groupDir)) continue;
     for (const entry of readdirSync(groupDir, { withFileTypes: true })) {
@@ -70,7 +70,9 @@ export function loadWorkspace(root) {
           ? 'app'
           : group === 'modules'
             ? 'module'
-            : SHARED_PACKAGE_LAYERS[entry.name];
+            : group === 'infrastructure'
+              ? 'infrastructure'
+              : SHARED_PACKAGE_LAYERS[entry.name];
       const { entries, unsupportedPatterns } = readEntrypoints(dir, manifest);
       packages.push({
         name: manifest.name,

@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "infrastructure/database/src/adapter.ts"
+    }
+  ]
+}

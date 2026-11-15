@@ -15,18 +15,28 @@ const ALLOWED_LAYERS = {
   config: ['kernel'],
   testing: ['kernel', 'contracts'],
   module: ['kernel', 'contracts'],
-  app: ['module', 'kernel', 'contracts', 'config'],
+  // Infrastructure adapters (PROPOSED, S0-04): may use only the framework-free layers. Adapters that
+  // implement a module's port need a decision on infrastructure -> module/public; denied until then.
+  infrastructure: ['kernel', 'contracts', 'config'],
+  app: ['module', 'kernel', 'contracts', 'config', 'infrastructure'],
 };
 const TEST_ONLY_TARGETS = { module: ['testing'], app: ['testing'] };
 
+/** ORMs, query builders and database drivers: allowed only in infrastructure packages and apps. */
+const PERSISTENCE_EXTERNALS = [
+  /^(typeorm|prisma|pg|pg-promise|postgres|slonik|knex|kysely|sequelize|mongoose|mysql2)(\/|$)/,
+  /^drizzle-(orm|kit)(\/|$)/,
+  /^@prisma\//,
+  /^@mikro-orm\//,
+];
 const KERNEL_FORBIDDEN_EXTERNALS = [
   /^@nestjs\//,
   /^next(\/|$)/,
   /^react(-dom)?(\/|$)/,
-  /^(typeorm|prisma|pg|knex|sequelize|mongoose|mysql2|drizzle-orm)(\/|$)/,
-  /^@prisma\//,
-  /^@mikro-orm\//,
+  ...PERSISTENCE_EXTERNALS,
 ];
+/** Layers that hold domain logic or public contracts and so must stay persistence-independent. */
+const PERSISTENCE_FREE_LAYERS = new Set(['kernel', 'contracts', 'config', 'module', 'testing']);
 
 function loadMatrix(matrixPath) {
   if (!matrixPath || !existsSync(matrixPath)) return {};
@@ -42,7 +52,7 @@ export function checkArchitecture({ root, matrixPath } = {}) {
   const packages = loadWorkspace(root);
   if (packages.length === 0) {
     throw new Error(
-      `no workspace packages found under ${root} (expected apps/*, modules/*, packages/*)`,
+      `no workspace packages found under ${root} (expected apps/*, modules/*, packages/*, infrastructure/*)`,
     );
   }
   const matrix = loadMatrix(matrixPath);
@@ -89,15 +99,19 @@ export function checkArchitecture({ root, matrixPath } = {}) {
         }
       }
     }
-    if (pkg.layer === 'kernel') {
+    if (PERSISTENCE_FREE_LAYERS.has(pkg.layer)) {
+      const forbidden = pkg.layer === 'kernel' ? KERNEL_FORBIDDEN_EXTERNALS : PERSISTENCE_EXTERNALS;
       for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
         for (const dep of Object.keys(pkg.manifest[field] ?? {})) {
-          if (dep.startsWith('@sdris/') || KERNEL_FORBIDDEN_EXTERNALS.some((re) => re.test(dep))) {
+          const internal = pkg.layer === 'kernel' && dep.startsWith('@sdris/');
+          if (internal || forbidden.some((re) => re.test(dep))) {
             violate(
               'dependency/manifest',
               manifestFile,
               1,
-              `Shared Kernel must not declare ${field}.${dep}.`,
+              pkg.layer === 'kernel'
+                ? `Shared Kernel must not declare ${field}.${dep}.`
+                : `${pkg.name} (${pkg.layer}) must stay persistence-independent; it declares ${field}.${dep}.`,
               { from: pkg.name, to: dep },
             );
           }
@@ -133,6 +147,22 @@ export function checkArchitecture({ root, matrixPath } = {}) {
               imp.line,
               `Shared Kernel must stay framework-independent; it imports "${imp.specifier}".`,
               { specifier: imp.specifier, from: pkg.name },
+            );
+          } else if (
+            pkg.layer !== 'kernel' &&
+            PERSISTENCE_FREE_LAYERS.has(pkg.layer) &&
+            PERSISTENCE_EXTERNALS.some((re) => re.test(imp.specifier))
+          ) {
+            violate(
+              'dependency/forbidden-external',
+              rel(file),
+              imp.line,
+              `${pkg.name} (${pkg.layer}) must stay persistence-independent; it imports "${imp.specifier}".`,
+              {
+                specifier: imp.specifier,
+                from: pkg.name,
+                hint: 'ORM, query-builder and driver code belongs in infrastructure/* adapters behind a port.',
+              },
             );
           }
           continue;
