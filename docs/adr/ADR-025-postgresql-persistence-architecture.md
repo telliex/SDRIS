@@ -6,6 +6,7 @@
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
 - **Related:** ADR-024, AGENTS.md, CLAUDE.md
 - **Implementation Reference:** PR #5 — S0-04 PostgreSQL & Migration Baseline
+- **Proposed amendments:** A1 — S0-05 persistence dependency policy (see below). **PROPOSED, pending Engineering Owner approval.**
 
 ## 1. Context
 
@@ -270,6 +271,8 @@ Do not broadly allow `@sdris/database` throughout `modules/*`.
 
 The change must include positive and negative architecture tests.
 
+See Proposed Amendment A1, which defines this refinement (pending Owner approval).
+
 ## 9. Decision 7 — Audit, Outbox, and Transactional Consistency
 
 **Decision: ACCEPT atomic persistence as an architectural requirement; defer concrete table ownership and workflow implementation.**
@@ -476,15 +479,109 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
 
 ## 17. Follow-up Actions
 
-| Task                   | Required action                                                  |
-| ---------------------- | ---------------------------------------------------------------- |
-| S0-04                  | Obtain ADR approval and reconcile the PR documentation           |
-| S0-05                  | Validate repository adapter ownership and UnitOfWork contract    |
-| S0-05                  | Refine architecture rules for context-owned persistence adapters |
-| Future governance task | Decide Audit/Outbox/Inbox/Jobs ownership                         |
-| Future retrieval task  | Decide Retrieval persistence and schema                          |
-| S0-10                  | Add PostgreSQL integration tests to GitHub CI                    |
-| Security review        | Triage existing dependency vulnerabilities                       |
+| Task                   | Required action                                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S0-04                  | Obtain ADR approval and reconcile the PR documentation                                                                                                 |
+| S0-05                  | Validate repository adapter ownership and UnitOfWork contract                                                                                          |
+| S0-05                  | Refine architecture rules for context-owned persistence adapters (proposed in Amendment A1; implemented in the checker on a branch, awaiting approval) |
+| Future governance task | Decide Audit/Outbox/Inbox/Jobs ownership                                                                                                               |
+| Future retrieval task  | Decide Retrieval persistence and schema                                                                                                                |
+| S0-10                  | Add PostgreSQL integration tests to GitHub CI                                                                                                          |
+| Security review        | Triage existing dependency vulnerabilities                                                                                                             |
+
+## Proposed Amendment A1 — Persistence Dependency Policy for S0-05
+
+- **Status:** PROPOSED — Pending Engineering Owner Approval. This amendment does not change the status of ADR-025
+  and is not in force until the Engineering Owner approves it in writing.
+- **Resolves:** the open points about Decisions 4 and 6 (where a repository adapter lives, whether it may import
+  `drizzle-orm` directly, and how "approved infrastructure-layer imports" is decided).
+- **Implementation reference:** branch `feat/s0-05-persistence-dependency-policy` (checker, fixtures and tests only; no
+  repository adapter is implemented).
+
+### A1.1 Terminology
+
+- **Global Infrastructure:** workspace packages under `infrastructure/*`, for example `@sdris/database`. They contain
+  technology plumbing shared by all contexts and no business logic.
+- **Context Infrastructure:** source files under `modules/<context>/src/infrastructure/**`. They implement that
+  context's own ports (for example the Investigation repository adapter) and are owned by that context.
+
+### A1.2 Rules
+
+1. **Persistence libraries are usable only from Context Infrastructure.** `drizzle-orm` (including subpaths such as
+   `drizzle-orm/pg-core`) and `@sdris/database` may be imported only from `modules/<context>/src/infrastructure/**`,
+   and only when explicitly allowlisted for that context (A1.3).
+2. **Domain, Application and Public code stay independent of database infrastructure.** Files under `src/domain`,
+   `src/application`, `src/public` (and any other path in a module) may not import ORMs, query builders, database
+   drivers or `@sdris/database`, even if their context is allowlisted. Type-only imports and re-exports are included.
+3. **Dependencies point inward.** `src/domain`, `src/application` and `src/public` may not import the same module's
+   `src/infrastructure/**`, directly, through a relative path, an alias, a barrel file or a re-export. A repository
+   adapter implements a port defined in `src/application`; the port never imports the adapter.
+4. **Global Infrastructure does not import business modules by default.** `infrastructure/*` may depend only on the
+   Shared Kernel, contracts and config. It may not import a business module's public entrypoint or internals. There is
+   no exception mechanism in this amendment: any exception requires a further amendment.
+5. **Access is restricted by source path and by one centralised allowlist.** A context's Context Infrastructure may use
+   a package only if both its path is `src/infrastructure/**` and the package is listed for that context in the
+   allowlist. No manifest-based mechanism is introduced at this stage.
+6. **Cross-context restrictions are unchanged.** A context may not import another context's private files or
+   repository adapters; module-to-module dependencies still require an approved edge through the other module's public
+   entrypoint. Context Infrastructure gets no additional cross-context rights.
+7. **`@sdris/database` is used only through its published entrypoint.** Subpath, relative-path and alias imports that
+   reach its internals remain forbidden for every importer.
+
+### A1.3 The centralised allowlist
+
+One file, `scripts/architecture/dependency-matrix.json`, already the home of the module-to-module matrix. A new top-level
+key lists, per module, what its Context Infrastructure may use. Everything not listed is denied:
+
+```json
+{
+  "moduleDependencies": {},
+  "contextInfrastructure": {
+    "@sdris/investigation": {
+      "workspacePackages": ["@sdris/database"],
+      "externalPackages": ["drizzle-orm"]
+    }
+  }
+}
+```
+
+- `workspacePackages` must name Global Infrastructure packages only. A business module cannot be listed.
+- `externalPackages` must name recognised persistence libraries.
+- A malformed entry makes the checker exit with code 2 (cannot analyse); it never silently grants or denies access.
+- A module's `package.json` may declare an allowlisted package as a dependency (pnpm requires it) and may not declare any
+  other persistence package.
+- The default committed allowlist is empty. The Investigation entry above is an example of what the S0-05 adapter pull
+  request would add, reviewed together with the adapter. It is not added by this amendment.
+
+### A1.4 Enforcement
+
+| Rule ID                               | Enforces                                                                                              |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `dependency/forbidden-external`       | Rules 1 and 2 for ORMs and drivers, including subpaths and type-only imports                          |
+| `dependency/direction`                | Rules 1 and 2 for `@sdris/database`; Rule 4 (Global Infrastructure to business modules); Rule 6 edges |
+| `dependency/manifest`                 | Manifests declaring a non-allowlisted persistence package or Global Infrastructure package (Rule 5)   |
+| `boundary/infrastructure-inversion`   | Rule 3, including relative, alias, barrel, re-export and directory-case spellings                     |
+| `boundary/private-import`             | Rules 6 and 7 for subpath and alias imports; unchanged                                                |
+| `boundary/package-specifier-required` | Rule 7 for relative-path imports into another package; unchanged                                      |
+
+Positive and negative fixtures cover alias, relative-path, subpath, type-only, barrel and re-export bypass attempts.
+Mutation checks show that removing the path restriction, the allowlist lookup, the inversion rule, the case handling or
+the manifest check each turns fixtures red.
+
+### A1.5 Consequences and trade-offs
+
+- Directory names under `src/` become architecture: files outside `src/public`, `src/domain`, `src/application` and
+  `src/infrastructure` have no persistence rights. A directory spelled `Infrastructure` is not treated as
+  Context Infrastructure, while import targets are matched case-insensitively so a spelling cannot hide a violation.
+- A new context that needs persistence needs a reviewed allowlist entry, which is deliberate friction.
+- Intra-module layering beyond Rule 3 (for example domain importing application) is not addressed by this amendment.
+
+### A1.6 Not decided here
+
+- Where `UnitOfWork` / `TransactionContext` finally live: still governed by Decision 5; S0-05 validates it with a real
+  repository.
+- Whether Global Infrastructure may ever import a business module's public contract (Rule 4 has no exception).
+- Audit, Outbox, Inbox and Job table ownership; the Retrieval schema; role-per-context and row-level security.
 
 ## 18. Acceptance and Change Control
 

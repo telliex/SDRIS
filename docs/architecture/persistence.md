@@ -61,7 +61,9 @@ Enforced by `pnpm check:architecture` (S0-03 rules, extended in this task; see
 - Modules, contracts, config, testing and the shared kernel cannot import ORMs, query builders or database
   drivers (`drizzle-orm`, `drizzle-kit`, `kysely`, `pg`, `postgres`, `knex`, `typeorm`, `prisma`, ...), nor declare
   them in their manifests.
-- Modules cannot import `@sdris/database` (default-deny layer rule).
+- Modules cannot import `@sdris/database` or an ORM from `src/domain`, `src/application` or `src/public`. Only a context's
+  `src/infrastructure/**` may, and only if allowlisted in `dependency-matrix.json` (`contextInfrastructure`, empty by
+  default). This is **proposed** in ADR-025 Amendment A1 and is not yet approved.
 
 ### Transactions without leaking ORM types
 
@@ -176,17 +178,17 @@ These prove technical capability only. The Audit and Transactional Outbox workfl
 
 ## 6. Open items and where ADR-025 treats them (all remain PROPOSED)
 
-| Item                                                                                                   | ADR-025                  | State in this PR                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drizzle ORM + SQL-first migrations                                                                     | Decision 1, 2            | Implemented as proposed                                                                                                                                                             |
-| Ten-schema ownership baseline                                                                          | Decision 3               | Implemented; Retrieval schema and audit/outbox/inbox/jobs ownership deferred                                                                                                        |
-| `infrastructure` layer policy and persistence-library ban                                              | Decision 4               | Implemented in the S0-03 checker with fixtures                                                                                                                                      |
-| `UnitOfWork` / `TransactionContext` home                                                               | Decision 5 (conditional) | Kept inside `@sdris/database`; S0-05 must re-evaluate with a real repository                                                                                                        |
-| Module-owned repository adapters depending on `@sdris/database` and their own module's public contract | Decision 6               | **Not implemented**: the checker still denies `module -> @sdris/database` and `infrastructure -> module`. ADR-025 requires a narrow, tested refinement before S0-05 adds an adapter |
-| Atomic domain + audit + outbox, idempotency, optimistic concurrency                                    | Decision 7, 8            | Capability verified with test-only tables; workflows not implemented                                                                                                                |
-| `drizzle-kit`                                                                                          | Decision 9 (deferred)    | Not adopted                                                                                                                                                                         |
-| Database integration tests and CI                                                                      | Decision 10              | `pnpm db:test` works locally; CI job belongs to S0-10, so local results are not an independently verified CI result                                                                 |
-| Reset safety                                                                                           | Decision 11              | Enforced in code with negative tests                                                                                                                                                |
+| Item                                                                                     | ADR-025                  | State in this PR                                                                                                                                                                        |
+| ---------------------------------------------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drizzle ORM + SQL-first migrations                                                       | Decision 1, 2            | Implemented as proposed                                                                                                                                                                 |
+| Ten-schema ownership baseline                                                            | Decision 3               | Implemented; Retrieval schema and audit/outbox/inbox/jobs ownership deferred                                                                                                            |
+| `infrastructure` layer policy and persistence-library ban                                | Decision 4               | Implemented in the S0-03 checker with fixtures                                                                                                                                          |
+| `UnitOfWork` / `TransactionContext` home                                                 | Decision 5 (conditional) | Kept inside `@sdris/database`; S0-05 must re-evaluate with a real repository                                                                                                            |
+| Module-owned repository adapters (Context Infrastructure) depending on `@sdris/database` | Decision 6, Amendment A1 | Rule set implemented in the checker with fixtures for review (path zones + central allowlist, empty by default); **no adapter is implemented**. Awaiting Owner approval of Amendment A1 |
+| Atomic domain + audit + outbox, idempotency, optimistic concurrency                      | Decision 7, 8            | Capability verified with test-only tables; workflows not implemented                                                                                                                    |
+| `drizzle-kit`                                                                            | Decision 9 (deferred)    | Not adopted                                                                                                                                                                             |
+| Database integration tests and CI                                                        | Decision 10              | `pnpm db:test` works locally; CI job belongs to S0-10, so local results are not an independently verified CI result                                                                     |
+| Reset safety                                                                             | Decision 11              | Enforced in code with negative tests                                                                                                                                                    |
 
 Until the Engineering Owner approves ADR-025, none of the above is an approved decision.
 

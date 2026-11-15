@@ -13,15 +13,15 @@ Canonical references (not duplicated here):
 
 ## Ownership
 
-| Layer            | Packages                              | Notes                                              |
-| ---------------- | ------------------------------------- | -------------------------------------------------- |
-| `app`            | `apps/web`, `apps/api`, `apps/worker` | Composition and delivery only                      |
-| `module`         | `modules/*` (nine bounded contexts)   | Own their internals                                |
-| `kernel`         | `packages/shared-kernel`              | Minimal technical primitives                       |
-| `contracts`      | `packages/contracts`                  | Public API and event contracts                     |
-| `config`         | `packages/config`                     | Configuration support                              |
-| `testing`        | `packages/testing`                    | Test utilities                                     |
-| `infrastructure` | `infrastructure/*`                    | Adapters and migrations (S0-04: `@sdris/database`) |
+| Layer            | Packages                              | Notes                                                                            |
+| ---------------- | ------------------------------------- | -------------------------------------------------------------------------------- |
+| `app`            | `apps/web`, `apps/api`, `apps/worker` | Composition and delivery only                                                    |
+| `module`         | `modules/*` (nine bounded contexts)   | Own their internals                                                              |
+| `kernel`         | `packages/shared-kernel`              | Minimal technical primitives                                                     |
+| `contracts`      | `packages/contracts`                  | Public API and event contracts                                                   |
+| `config`         | `packages/config`                     | Configuration support                                                            |
+| `testing`        | `packages/testing`                    | Test utilities                                                                   |
+| `infrastructure` | `infrastructure/*`                    | **Global Infrastructure**: shared technology plumbing (S0-04: `@sdris/database`) |
 
 A new directory under `packages/` is reported as `workspace/unclassified-package` until its layer is
 decided. The checker does not guess permissions.
@@ -33,15 +33,15 @@ apps/*  ──►  modules (public entrypoint only)  ──►  shared-kernel, c
    └──────────────────────────────────────────────►  shared-kernel, contracts, config
 ```
 
-| From             | May import                                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------------------- |
-| `app`            | module public entrypoints, kernel, contracts, config, infrastructure; `testing` from test files       |
-| `module`         | kernel, contracts; `testing` from test files; **other modules only if in the matrix**                 |
-| `kernel`         | nothing in the workspace, and no framework or ORM packages                                            |
-| `contracts`      | kernel                                                                                                |
-| `config`         | kernel                                                                                                |
-| `testing`        | kernel, contracts                                                                                     |
-| `infrastructure` | kernel, contracts, config (not modules: pending Owner decision, see [persistence.md](persistence.md)) |
+| From             | May import                                                                                                      |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `app`            | module public entrypoints, kernel, contracts, config, infrastructure; `testing` from test files                 |
+| `module`         | kernel, contracts; `testing` from test files; **other modules only if in the matrix**                           |
+| `kernel`         | nothing in the workspace, and no framework or ORM packages                                                      |
+| `contracts`      | kernel                                                                                                          |
+| `config`         | kernel                                                                                                          |
+| `testing`        | kernel, contracts                                                                                               |
+| `infrastructure` | kernel, contracts, config. **Not business modules, with no default exception** (proposed, ADR-025 Amendment A1) |
 
 Nothing may import an `app`. Test files are `*.spec.*`, `*.test.*` and anything under `__tests__`.
 
@@ -82,19 +82,20 @@ More cases live in `tests/architecture/fixtures/{valid,invalid}/`; each director
 
 ## Rules
 
-| Rule                                  | Enforces                                                                                                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `boundary/private-import`             | Importing another package's non-published code (relative, alias, package subpath)                                                                                       |
-| `boundary/package-specifier-required` | Relative import into another package's public file                                                                                                                      |
-| `boundary/unknown-workspace-package`  | `@sdris/*` name that is not a workspace package                                                                                                                         |
-| `boundary/outside-workspace`          | Import resolving outside every workspace package                                                                                                                        |
-| `dependency/direction`                | Layer policy and the module matrix above                                                                                                                                |
-| `dependency/forbidden-external`       | Kernel importing NestJS, Next.js, React or an ORM; any non-infrastructure layer (module, contracts, config, testing) importing an ORM, query builder or database driver |
-| `dependency/manifest`                 | Kernel `package.json` declaring workspace or framework/ORM dependencies; module, contracts, config or testing manifests declaring an ORM, query builder or driver       |
-| `package/entrypoint-location`         | Module entrypoint outside `src/public/`                                                                                                                                 |
-| `package/unsupported-exports-pattern` | `exports` wildcard the checker cannot analyse                                                                                                                           |
-| `cycle/cross-package`                 | Dependency cycle across packages (labelled `(type-only)` when every edge is)                                                                                            |
-| `workspace/unclassified-package`      | `packages/*` entry with no declared layer                                                                                                                               |
+| Rule                                  | Enforces                                                                                                                                                                                                        |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boundary/private-import`             | Importing another package's non-published code (relative, alias, package subpath)                                                                                                                               |
+| `boundary/package-specifier-required` | Relative import into another package's public file                                                                                                                                                              |
+| `boundary/unknown-workspace-package`  | `@sdris/*` name that is not a workspace package                                                                                                                                                                 |
+| `boundary/outside-workspace`          | Import resolving outside every workspace package                                                                                                                                                                |
+| `dependency/direction`                | Layer policy and the module matrix above                                                                                                                                                                        |
+| `dependency/forbidden-external`       | Kernel importing NestJS, Next.js, React or an ORM; contracts, config or testing importing an ORM, query builder or driver; a module importing one outside `src/infrastructure/**` or without an allowlist entry |
+| `boundary/infrastructure-inversion`   | A module's `src/domain`, `src/application` or `src/public` importing its own `src/infrastructure/**` (relative, alias, barrel, re-export)                                                                       |
+| `dependency/manifest`                 | Kernel `package.json` declaring workspace or framework/ORM dependencies; module, contracts, config or testing manifests declaring an ORM, query builder or driver                                               |
+| `package/entrypoint-location`         | Module entrypoint outside `src/public/`                                                                                                                                                                         |
+| `package/unsupported-exports-pattern` | `exports` wildcard the checker cannot analyse                                                                                                                                                                   |
+| `cycle/cross-package`                 | Dependency cycle across packages (labelled `(type-only)` when every edge is)                                                                                                                                    |
+| `workspace/unclassified-package`      | `packages/*` entry with no declared layer                                                                                                                                                                       |
 
 Imports covered: `import`, `import type`, `export ... from`, `import x = require()`, `require()`, dynamic
 `import()` with a literal, and `import('x').T` types. Relative paths, tsconfig `paths` and `baseUrl` (including
@@ -143,7 +144,7 @@ published contract cannot serve, and the owning context; the matrix change lands
   specifiers are treated as external.
 - `exports` wildcard patterns and conditional resolution beyond picking declared targets are unsupported.
 - Declared-dependency hygiene (importing `@sdris/x` without listing it in `package.json`) is not checked.
-- `infrastructure/*` packages are scanned as the `infrastructure` layer (S0-04). Module-internal `modules/*/src/infrastructure` folders remain part of their module package and, like the whole module, may not import ORMs or drivers until the Owner decides how module-owned adapters depend on `@sdris/database`.
+- `infrastructure/*` packages are scanned as the `infrastructure` layer (Global Infrastructure). `modules/<context>/src/infrastructure/**` is **Context Infrastructure**: the only place in a module where an allowlisted persistence package may be used (proposed in ADR-025 Amendment A1). Domain, application and public code never may, and may not import their own Context Infrastructure.
 - Database-level ownership ("never write another module's tables") is out of scope for import checks.
 
 ## Decision evidence and pending Owner decisions
@@ -151,16 +152,17 @@ published contract cannot serve, and the owning context; the matrix change lands
 Everything in this document is **PROPOSED**. Nothing here is approved by the Engineering Owner. This
 table records what evidence exists in the repository, and what is missing.
 
-| Item                                                       | Evidence found in the repository                                                                                                                                             | Status                     |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Formal S0-03 acceptance criteria                           | Task name only: [CLAUDE.md](../../CLAUDE.md) task table ("S0-03 Architecture Boundary Rules"). The criteria came from the task prompt, which is not committed.               | **Pending Owner Decision** |
-| Architecture Baseline                                      | None. `docs/architecture/` was empty before this document. [AGENTS.md](../../AGENTS.md) says ADR-001 to ADR-024 exist in planning history and must not be assumed committed. | **Pending Owner Decision** |
-| ADRs                                                       | Only [ADR-024](../adr/ADR-024-sprint-0-execution.md), which scopes Sprint 0 but sets no dependency rules.                                                                    | **Pending Owner Decision** |
-| Module-to-module dependency matrix                         | None. `scripts/architecture/dependency-matrix.json` is empty and marked PROPOSED; default is deny.                                                                           | **Pending Owner Decision** |
-| `infrastructure` layer and persistence-library ban (S0-04) | Added to the checker with fixtures `23*` to `26*`, valid `16`, `17`. Implementer's proposal derived from the S0-04 task and AGENTS.md section 3; not an approved policy.     | **Pending Owner Decision** |
-| Shared-package layer policy                                | Not defined. The policy table above is the implementer's proposal based on [AGENTS.md section 5](../../AGENTS.md).                                                           | **Pending Owner Decision** |
-| Cross-package relative imports                             | Not defined. Rejected by this checker as a conservative choice.                                                                                                              | **Pending Owner Decision** |
-| CI deferred to S0-10                                       | [CLAUDE.md](../../CLAUDE.md) task table lists "S0-10 CI Gates"; no `.github/workflows` exist. The deferral rule itself comes from the uncommitted task prompt.               | **Pending Owner Decision** |
+| Item                                                                                          | Evidence found in the repository                                                                                                                                                                                  | Status                     |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Formal S0-03 acceptance criteria                                                              | Task name only: [CLAUDE.md](../../CLAUDE.md) task table ("S0-03 Architecture Boundary Rules"). The criteria came from the task prompt, which is not committed.                                                    | **Pending Owner Decision** |
+| Architecture Baseline                                                                         | None. `docs/architecture/` was empty before this document. [AGENTS.md](../../AGENTS.md) says ADR-001 to ADR-024 exist in planning history and must not be assumed committed.                                      | **Pending Owner Decision** |
+| ADRs                                                                                          | Only [ADR-024](../adr/ADR-024-sprint-0-execution.md), which scopes Sprint 0 but sets no dependency rules.                                                                                                         | **Pending Owner Decision** |
+| Module-to-module dependency matrix                                                            | None. `scripts/architecture/dependency-matrix.json` is empty and marked PROPOSED; default is deny.                                                                                                                | **Pending Owner Decision** |
+| Context Infrastructure allowlist, zone restrictions and inversion rule (ADR-025 Amendment A1) | `scripts/architecture/dependency-matrix.json` key `contextInfrastructure` (empty by default); fixtures `27*` to `32*`, valid `18`, `19`; policy validation tests. Implemented for review; not an approved policy. | **Pending Owner Decision** |
+| `infrastructure` layer and persistence-library ban (S0-04)                                    | Added to the checker with fixtures `23*` to `26*`, valid `16`, `17`. Implementer's proposal derived from the S0-04 task and AGENTS.md section 3; not an approved policy.                                          | **Pending Owner Decision** |
+| Shared-package layer policy                                                                   | Not defined. The policy table above is the implementer's proposal based on [AGENTS.md section 5](../../AGENTS.md).                                                                                                | **Pending Owner Decision** |
+| Cross-package relative imports                                                                | Not defined. Rejected by this checker as a conservative choice.                                                                                                                                                   | **Pending Owner Decision** |
+| CI deferred to S0-10                                                                          | [CLAUDE.md](../../CLAUDE.md) task table lists "S0-10 CI Gates"; no `.github/workflows` exist. The deferral rule itself comes from the uncommitted task prompt.                                                    | **Pending Owner Decision** |
 
 Do not change a status to APPROVED without an Owner-approved ADR or an explicit recorded approval.
 
