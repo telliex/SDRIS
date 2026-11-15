@@ -14,12 +14,29 @@ const stat = (p) => {
 const isFile = (p) => stat(p)?.isFile() === true;
 const isDirectory = (p) => stat(p)?.isDirectory() === true;
 
-/** Files a specifier could name as a *file*: itself, with each extension, and `.js` -> TS source. */
+const TS_EXTENSION = /\.(?:d\.ts|[cm]?tsx?)$/;
+/** TypeScript maps a JavaScript extension in a specifier to these source extensions, in order. */
+const SUBSTITUTIONS = {
+  '.js': ['.ts', '.tsx', '.d.ts'],
+  '.jsx': ['.tsx', '.d.ts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
+};
+
+/**
+ * Files a specifier could name as a *file*, in TypeScript's order: a `.js`-style specifier tries its
+ * TypeScript sources first and the JavaScript file last; a TypeScript extension names itself;
+ * anything else has extensions appended (TypeScript before JavaScript).
+ */
 function fileCandidates(abs) {
-  const stripped = abs.replace(/\.[cm]?[jt]sx?$/, '');
-  const out = [abs];
-  for (const base of new Set([abs, stripped])) for (const ext of EXTENSIONS) out.push(base + ext);
-  return out;
+  const ext = path.extname(abs);
+  const substitutes = SUBSTITUTIONS[ext];
+  if (substitutes) {
+    const base = abs.slice(0, -ext.length);
+    return [...substitutes.map((e) => base + e), abs];
+  }
+  if (TS_EXTENSION.test(abs)) return [abs];
+  return EXTENSIONS.map((e) => abs + e);
 }
 
 /**
