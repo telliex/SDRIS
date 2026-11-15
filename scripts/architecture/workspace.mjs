@@ -85,6 +85,7 @@ export function loadWorkspace(root) {
         manifestPath,
         entries,
         entryFiles: new Set([...entries.values()].flatMap((s) => [...s])),
+        compositionFiles: entries.get('./composition') ?? new Set(),
         unsupportedPatterns,
       });
     }
@@ -127,8 +128,9 @@ export const isTestFile = (file) =>
   /\.(?:spec|test)\.[cm]?[jt]sx?$/.test(file) || file.split(path.sep).includes('__tests__');
 
 /**
- * Architectural zone of a file inside a module package, by source path:
- * `src/public`, `src/domain`, `src/application`, `src/infrastructure` (Context Infrastructure) or `other`.
+ * Architectural zone of a file inside a module package, by source path: `src/public`, `src/domain`,
+ * `src/application`, `src/infrastructure` (Context Infrastructure), `src/composition` (the dedicated
+ * composition entry zone) or `other`.
  * `ignoreCase` is used for import *targets*: on a case-insensitive file system `../Infrastructure/x` resolves
  * to the same directory, so a target must never escape the zone by spelling. An importing file is matched
  * exactly, so a directory merely spelled `Infrastructure` is not granted infrastructure rights.
@@ -136,7 +138,7 @@ export const isTestFile = (file) =>
 export function zoneOf(pkg, file, { ignoreCase = false } = {}) {
   const rel = toPosix(path.relative(pkg.dir, file));
   const m = new RegExp(
-    '^src/(public|domain|application|infrastructure)(/|$)',
+    '^src/(public|domain|application|infrastructure|composition)(/|$)',
     ignoreCase ? 'i' : '',
   ).exec(rel);
   return m ? m[1].toLowerCase() : 'other';

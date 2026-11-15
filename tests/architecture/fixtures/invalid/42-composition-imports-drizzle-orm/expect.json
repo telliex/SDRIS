@@ -1,0 +1,13 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/composition/index.ts"
+    },
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/composition/index.ts"
+    }
+  ],
+  "messageIncludes": "zone \"composition\""
+}

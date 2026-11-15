@@ -1,0 +1,10 @@
+{
+  "moduleDependencies": {},
+  "contextInfrastructure": {},
+  "compositionRoots": {
+    "@sdris/investigation": {
+      "packages": ["@sdris/api"],
+      "paths": ["apps/api/src/composition/**"]
+    }
+  }
+}

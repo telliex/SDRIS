@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/composition-inversion",
+      "file": "modules/investigation/src/application/x.ts"
+    }
+  ]
+}

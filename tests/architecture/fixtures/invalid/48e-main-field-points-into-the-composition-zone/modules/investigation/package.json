@@ -1,0 +1,4 @@
+{
+  "name": "@sdris/investigation",
+  "main": "src/composition/index.ts"
+}

@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "infrastructure/database/src/index.ts"
+    },
+    {
+      "rule": "cycle/cross-package",
+      "file": "infrastructure/database/src/index.ts"
+    }
+  ]
+}

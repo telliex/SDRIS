@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/package-specifier-required",
+      "file": "apps/api/src/composition/investigation.ts"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/composition-access",
+      "file": "apps/api/src/composition/investigation.ts"
+    }
+  ]
+}

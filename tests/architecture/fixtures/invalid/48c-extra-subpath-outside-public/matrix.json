@@ -1,0 +1,15 @@
+{
+  "moduleDependencies": {},
+  "contextInfrastructure": {
+    "@sdris/investigation": {
+      "workspacePackages": ["@sdris/database"],
+      "externalPackages": ["drizzle-orm"]
+    }
+  },
+  "compositionRoots": {
+    "@sdris/investigation": {
+      "packages": ["@sdris/api"],
+      "paths": ["apps/api/src/composition/**"]
+    }
+  }
+}

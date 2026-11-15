@@ -93,6 +93,78 @@ test('the default policy grants no context-infrastructure access', async () => {
   assert.deepEqual(matrix.contextInfrastructure, {});
 });
 
+test('the default policy authorises no composition root', async () => {
+  const { default: matrix } = await import('../../scripts/architecture/dependency-matrix.json', {
+    with: { type: 'json' },
+  });
+  assert.deepEqual(matrix.compositionRoots ?? {}, {});
+});
+
+const MALFORMED_COMPOSITION_ROOTS = {
+  'a key that is not a module': {
+    '@sdris/api': { packages: ['@sdris/api'], paths: ['apps/api/src/composition/**'] },
+  },
+  'a key that does not exist': {
+    '@sdris/unknown': { packages: ['@sdris/api'], paths: ['apps/api/src/c/**'] },
+  },
+  'an unknown property': {
+    '@sdris/investigation': { packages: ['@sdris/api'], paths: ['apps/api/src/c/**'], x: 1 },
+  },
+  'an empty package list': {
+    '@sdris/investigation': { packages: [], paths: ['apps/api/src/c/**'] },
+  },
+  'an empty path list': { '@sdris/investigation': { packages: ['@sdris/api'], paths: [] } },
+  'a business module as composition root': {
+    '@sdris/investigation': { packages: ['@sdris/evidence'], paths: ['modules/evidence/src/**'] },
+  },
+  'a non-app package as composition root': {
+    '@sdris/investigation': {
+      packages: ['@sdris/database'],
+      paths: ['infrastructure/database/src/**'],
+    },
+  },
+  'a path outside the listed app': {
+    '@sdris/investigation': { packages: ['@sdris/api'], paths: ['apps/web/src/**'] },
+  },
+  'a path with a wildcard in the middle': {
+    '@sdris/investigation': { packages: ['@sdris/api'], paths: ['apps/api/**/composition'] },
+  },
+  'a non-string path': { '@sdris/investigation': { packages: ['@sdris/api'], paths: [1] } },
+};
+for (const [label, compositionRoots] of Object.entries(MALFORMED_COMPOSITION_ROOTS)) {
+  test(`a malformed composition-root allowlist (${label}) cannot be analysed`, () => {
+    const dir = scenarios('valid').find((s) => s.name.startsWith('20-')).dir;
+    const { root, matrixPath, cleanup } = buildScenario(dir);
+    try {
+      writeFileSync(
+        matrixPath,
+        JSON.stringify({ moduleDependencies: {}, contextInfrastructure: {}, compositionRoots }),
+      );
+      assert.throws(() => checkArchitecture({ root, matrixPath }), /invalid dependency policy/);
+      assert.equal(runCli(['--root', root, '--matrix', matrixPath]).status, 2);
+    } finally {
+      cleanup();
+    }
+  });
+}
+
+test('V5: the composition wiring adds no dependency cycle and the expected package edges', () => {
+  const dir = scenarios('valid').find((s) => s.name.startsWith('20-')).dir;
+  const { root, matrixPath, cleanup } = buildScenario(dir);
+  try {
+    const { violations, stats } = checkArchitecture({ root, matrixPath });
+    assert.deepEqual(violations, []);
+    assert.ok(!violations.some((v) => v.rule === 'cycle/cross-package'));
+    const edges = new Set(stats.edges.map((e) => `${e.from} -> ${e.to}`));
+    assert.ok(edges.has('@sdris/api -> @sdris/investigation'), [...edges].join('\n'));
+    assert.ok(edges.has('@sdris/investigation -> @sdris/database'), [...edges].join('\n'));
+    assert.ok(!edges.has('@sdris/database -> @sdris/investigation'));
+    assert.ok(!edges.has('@sdris/investigation -> @sdris/api'));
+  } finally {
+    cleanup();
+  }
+});
+
 const MALFORMED_POLICIES = {
   'a key that is not a module': { '@sdris/database': { workspacePackages: ['@sdris/database'] } },
   'a key that does not exist': { '@sdris/unknown': { externalPackages: ['drizzle-orm'] } },

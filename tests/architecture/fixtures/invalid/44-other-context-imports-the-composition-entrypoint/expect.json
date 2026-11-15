@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/composition-access",
+      "file": "modules/evidence/src/application/x.ts"
+    }
+  ]
+}
