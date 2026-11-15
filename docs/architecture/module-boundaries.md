@@ -95,8 +95,10 @@ More cases live in `tests/architecture/fixtures/{valid,invalid}/`; each director
 | `workspace/unclassified-package`      | `packages/*` entry with no declared layer                                         |
 
 Imports covered: `import`, `import type`, `export ... from`, `import x = require()`, `require()`, dynamic
-`import()` with a literal, and `import('x').T` types. Relative paths, tsconfig `paths` (including
-`extends`) and workspace names are all resolved.
+`import()` with a literal, and `import('x').T` types. Relative paths, tsconfig `paths` and `baseUrl` (including
+`extends`) and workspace names are all resolved. Non-relative specifiers follow TypeScript's order: `paths`,
+then `baseUrl`, then workspace/external packages. An alias only counts if its target file exists; otherwise
+resolution falls through, as it does in `tsc`.
 
 ## Running
 
@@ -131,6 +133,8 @@ published contract cannot serve, and the owning context; the matrix change lands
 - Cycles **inside** one package are allowed. Only cycles across packages fail.
 - Type-only imports are checked like value imports for boundaries and cycles (they still couple designs);
   a cycle made only of type-only edges is labelled.
+- `package.json` `imports` (`#subpath` specifiers), `rootDirs` and `moduleSuffixes` are not resolved; such
+  specifiers are treated as external.
 - `exports` wildcard patterns and conditional resolution beyond picking declared targets are unsupported.
 - Declared-dependency hygiene (importing `@sdris/x` without listing it in `package.json`) is not checked.
 - `infrastructure/*` has no TypeScript yet and is not scanned.

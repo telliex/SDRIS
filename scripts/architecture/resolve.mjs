@@ -32,7 +32,8 @@ export function resolveExisting(abs) {
 
 const tsconfigCache = new Map();
 
-function loadPathsConfig(tsconfigPath) {
+/** Reads `paths` and `baseUrl` (including values inherited through `extends`) from a tsconfig. */
+function loadModuleConfig(tsconfigPath) {
   if (tsconfigCache.has(tsconfigPath)) return tsconfigCache.get(tsconfigPath);
   let result = null;
   const read = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
@@ -44,7 +45,13 @@ function loadPathsConfig(tsconfigPath) {
       path.dirname(tsconfigPath),
     );
     const { paths, baseUrl, pathsBasePath } = parsed.options;
-    if (paths) result = { paths, base: baseUrl ?? pathsBasePath ?? path.dirname(tsconfigPath) };
+    if (paths || baseUrl) {
+      result = {
+        paths,
+        baseUrl,
+        pathsBase: baseUrl ?? pathsBasePath ?? path.dirname(tsconfigPath),
+      };
+    }
   }
   tsconfigCache.set(tsconfigPath, result);
   return result;
@@ -60,15 +67,10 @@ function findTsconfig(fromDir, root) {
   }
 }
 
-/**
- * Resolves `specifier` through the nearest tsconfig's `paths` (including `extends`). Returns the
- * absolute target path, or undefined when no alias pattern matches. Longest prefix wins, as in tsc.
- */
-export function resolveAlias(specifier, importerFile, root) {
-  const tsconfig = findTsconfig(path.dirname(importerFile), root);
-  const config = tsconfig && loadPathsConfig(tsconfig);
-  if (!config) return undefined;
-  const patterns = Object.keys(config.paths)
+/** Existing targets of the longest-prefix matching `paths` pattern (as tsc picks it). */
+function pathsTargets(specifier, { paths, pathsBase }) {
+  if (!paths) return [];
+  const match = Object.keys(paths)
     .map((pattern) => {
       const star = pattern.indexOf('*');
       return star < 0
@@ -87,14 +89,31 @@ export function resolveAlias(specifier, importerFile, root) {
           specifier.startsWith(prefix) &&
           specifier.endsWith(suffix),
     )
-    .sort((a, b) => b.prefix.length - a.prefix.length);
-  const match = patterns[0];
-  if (!match) return undefined;
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0];
+  if (!match) return [];
   const captured = match.exact
     ? ''
     : specifier.slice(match.prefix.length, specifier.length - match.suffix.length);
-  const targets = config.paths[match.pattern].map((t) =>
-    path.resolve(config.base, t.replace('*', captured)),
-  );
-  return targets.find((t) => resolveExisting(t)) ?? targets[0];
+  return paths[match.pattern].map((t) => path.resolve(pathsBase, t.replace('*', captured)));
+}
+
+/**
+ * Mirrors TypeScript's module resolution order for non-relative specifiers: tsconfig `paths`, then
+ * `baseUrl`. A candidate only counts if the file actually exists; otherwise resolution falls
+ * through (to workspace-package or external classification), exactly as tsc does. Returns the
+ * absolute target path, or undefined when no alias or baseUrl lookup resolves.
+ */
+export function resolveAlias(specifier, importerFile, root) {
+  const tsconfig = findTsconfig(path.dirname(importerFile), root);
+  const config = tsconfig && loadModuleConfig(tsconfig);
+  if (!config) return undefined;
+
+  const viaPaths = pathsTargets(specifier, config).find((t) => resolveExisting(t));
+  if (viaPaths) return viaPaths;
+
+  if (config.baseUrl && !specifier.startsWith('.') && !path.isAbsolute(specifier)) {
+    const viaBaseUrl = path.resolve(config.baseUrl, specifier);
+    if (resolveExisting(viaBaseUrl)) return viaBaseUrl;
+  }
+  return undefined;
 }
