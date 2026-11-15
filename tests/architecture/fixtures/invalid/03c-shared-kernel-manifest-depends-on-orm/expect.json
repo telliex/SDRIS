@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/manifest",
+      "file": "packages/shared-kernel/package.json"
+    },
+    {
+      "rule": "dependency/manifest",
+      "file": "packages/shared-kernel/package.json"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/package-specifier-required",
+      "file": "modules/investigation/src/application/open-case.ts"
+    }
+  ]
+}

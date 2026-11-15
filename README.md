@@ -32,15 +32,16 @@ pnpm dev
 
 ## Workspace scripts
 
-| Script                 | Purpose                                               |
-| ---------------------- | ----------------------------------------------------- |
-| `pnpm dev`             | Run web, api and worker in watch mode                 |
-| `pnpm build`           | Build every workspace that defines a build            |
-| `pnpm typecheck`       | Type-check apps, modules and shared packages          |
-| `pnpm lint`            | ESLint (`pnpm lint:fix` to auto-fix)                  |
-| `pnpm format`          | Prettier write (`pnpm format:check` to verify)        |
-| `pnpm test`            | Workspace structure test plus API `/health/live` test |
-| `pnpm check:structure` | Verify expected apps, modules and public entry points |
+| Script                    | Purpose                                                                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                | Run web, api and worker in watch mode                                                                                                   |
+| `pnpm build`              | Build every workspace that defines a build                                                                                              |
+| `pnpm typecheck`          | Type-check apps, modules and shared packages                                                                                            |
+| `pnpm lint`               | ESLint (`pnpm lint:fix` to auto-fix)                                                                                                    |
+| `pnpm format`             | Prettier write (`pnpm format:check` to verify)                                                                                          |
+| `pnpm test`               | Workspace structure, architecture boundary fixtures (incl. a TypeScript-resolver parity check), shared-kernel and API tests             |
+| `pnpm check:architecture` | Enforce module import boundaries; exit 0 compliant, 1 violations, 2 cannot analyse (see [docs](docs/architecture/module-boundaries.md)) |
+| `pnpm check:structure`    | Verify expected apps, modules and public entry points                                                                                   |
 
 Run a single workspace with `pnpm --filter @sdris/api <script>`. Add dependencies to a
 specific workspace the same way (`pnpm --filter @sdris/api add <pkg>`), not at the root.

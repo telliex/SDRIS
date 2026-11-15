@@ -1,0 +1,5 @@
+{
+  "status": "PROPOSED - the approved Architecture Baseline dependency matrix is not committed yet",
+  "description": "Module-to-module dependencies through published public entrypoints. Default is deny. Each edge needs an ADR; do not add edges to make a check pass.",
+  "moduleDependencies": {}
+}

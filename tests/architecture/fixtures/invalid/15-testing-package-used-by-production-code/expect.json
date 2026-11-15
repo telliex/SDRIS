@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "apps/api/src/uses-testing.ts"
+    }
+  ]
+}

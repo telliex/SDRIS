@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@sdris/evidence": ["../../modules/evidence/src/domain/model.ts"]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@sdris/evidence",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    ".": "./src/public/index.ts",
+    "./contracts": "./src/public/contracts.ts"
+  }
+}

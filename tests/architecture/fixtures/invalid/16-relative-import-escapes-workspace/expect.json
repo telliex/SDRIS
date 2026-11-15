@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/outside-workspace",
+      "file": "apps/web/src/escape.ts"
+    }
+  ]
+}

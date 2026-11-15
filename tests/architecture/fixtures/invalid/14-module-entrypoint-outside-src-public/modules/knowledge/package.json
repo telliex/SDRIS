@@ -1,0 +1,7 @@
+{
+  "name": "@sdris/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/domain/model.ts",
+  "types": "src/domain/model.ts"
+}

@@ -1,0 +1,6 @@
+{
+  "moduleDependencies": {
+    "@sdris/investigation": ["@sdris/evidence"],
+    "@sdris/evidence": ["@sdris/investigation"]
+  }
+}
