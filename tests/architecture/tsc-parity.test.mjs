@@ -25,6 +25,9 @@ const cases = [
   ['valid', '11-', 'local', 'local'],
   ['valid', '11-', '@sdris/evidence', 'public'],
   ['valid', '12-', 'modules/evidence/src/public', 'public'],
+  ['invalid', '19-', 'modules/evidence/src/public', 'private'],
+  ['invalid', '20-', 'modules/evidence/src/domain', 'private'],
+  ['valid', '14-', 'modules/evidence', 'public'],
   ['valid', '01-', '@sdris/investigation', 'public'],
 ];
 

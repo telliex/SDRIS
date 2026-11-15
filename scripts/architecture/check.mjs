@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { extractImports } from './imports.mjs';
-import { candidateFiles, resolveAlias } from './resolve.mjs';
+import { resolveAlias, resolveFile } from './resolve.mjs';
 import { isTestFile, listSourceFiles, loadWorkspace, ownerOf, toPosix } from './workspace.mjs';
 
 /**
@@ -252,8 +252,10 @@ function classify({ pkg, file, imp, root }, packages, byName) {
   }
   if (owner === pkg) return { owner };
 
-  const isEntry = candidateFiles(abs).some((c) => owner.entryFiles.has(c));
-  const shown = toPosix(path.relative(root, abs));
+  // Compare the one file the import actually resolves to. An unresolvable target is not published.
+  const resolvedFile = resolveFile(abs);
+  const isEntry = resolvedFile !== undefined && owner.entryFiles.has(resolvedFile);
+  const shown = toPosix(path.relative(root, resolvedFile ?? abs));
   if (!isEntry) {
     return {
       owner,

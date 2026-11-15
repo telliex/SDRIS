@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { resolveFile } from './resolve.mjs';
 
 /** Layers recognised by the dependency policy. Unknown shared packages are reported, not guessed. */
 const SHARED_PACKAGE_LAYERS = {
@@ -21,7 +22,11 @@ export const toPosix = (p) => p.split(path.sep).join('/');
 function readEntrypoints(dir, manifest) {
   const entries = new Map();
   const issues = [];
-  const abs = (rel) => path.resolve(dir, rel);
+  // Entrypoints are compared by the file they resolve to, so `./src/public` and `src/public/index.ts` match.
+  const abs = (rel) => {
+    const absolute = path.resolve(dir, rel);
+    return resolveFile(absolute) ?? absolute;
+  };
   const pick = (value) => {
     if (typeof value === 'string') return [value];
     if (value && typeof value === 'object') {

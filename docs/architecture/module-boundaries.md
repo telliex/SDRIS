@@ -99,6 +99,10 @@ Imports covered: `import`, `import type`, `export ... from`, `import x = require
 `extends`) and workspace names are all resolved. Non-relative specifiers follow TypeScript's order: `paths`,
 then `baseUrl`, then workspace/external packages. An alias only counts if its target file exists; otherwise
 resolution falls through, as it does in `tsc`.
+Each import is resolved to the single file TypeScript would pick (a file beats a directory of the same
+name, then a directory's `package.json` `types`/`main`, then `index`), and only that file is compared with
+the package's published entrypoints. A sibling `public.ts` therefore does not inherit the status of
+`public/index.ts`.
 
 ## Running
 
