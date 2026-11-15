@@ -111,7 +111,13 @@ Files live in `infrastructure/database/migrations/` as `NNNN_snake_case.sql`.
   `ABORT`, `PREPARE TRANSACTION`). A script that committed early would leave its changes applied but unrecorded if
   anything later failed. Such files are rejected with `TRANSACTION_CONTROL` when scripts are loaded, before any script
   runs (also by `db:status`). `SAVEPOINT`, `ROLLBACK TO` and `RELEASE` are allowed. Detection is a lexical scan that
-  ignores comments, strings, quoted identifiers and dollar-quoted bodies; it is not a SQL parser.
+  ignores comments (ended by LF or CR, as PostgreSQL does), strings, quoted identifiers and dollar-quoted bodies; it is not
+  a SQL parser. It never skips a statement: inside a genuine `CREATE FUNCTION|PROCEDURE ... BEGIN ATOMIC ... END` body
+  (recognised only at parenthesis depth 0) every statement is still checked and only a lone `END` closes the body; an
+  unclosed body is reported. A differential test (`migrations.differential.integration.test.ts`) generates scripts and
+  uses real PostgreSQL as ground truth (a `SET LOCAL` sentinel lost when the transaction ends): every script that escapes
+  must be flagged and control-free scripts must not be. It covers generated fragments only, so it is evidence, not a proof;
+  a SQL parser (for example libpg_query) would be the structural alternative if more assurance is needed.
 - Scripts therefore cannot contain statements that refuse to run in a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`).
   A task needing one must raise it for review.
 - No migration is ever run automatically against a shared database; there is no production migration path in Sprint 0.

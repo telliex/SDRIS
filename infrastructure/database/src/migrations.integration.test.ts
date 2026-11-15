@@ -219,6 +219,43 @@ describe('migrations against real PostgreSQL', () => {
     );
   });
 
+  it('rejects the scanner bypasses found in review before anything runs (CR comment, begin-atomic lookalike)', async () => {
+    const probes: Record<string, string> = {
+      '0002_cr_comment.sql':
+        'create schema atomicity_probe; -- comment\rCOMMIT;\rselect * from no_such_review_table;',
+      '0002_crlf_comment.sql':
+        'create schema atomicity_probe; -- comment\r\nCOMMIT;\r\nselect * from no_such_review_table;',
+      '0002_atomic_lookalike.sql': [
+        'create schema atomicity_probe;',
+        'create domain atomic as integer;',
+        'create table atomicity_probe.t (begin atomic);',
+        'COMMIT;',
+        'select * from no_such_review_table;',
+      ].join('\n'),
+    };
+    for (const [name, body] of Object.entries(probes)) {
+      // a valid pending script ahead of it must not be applied either
+      const dir = scratchMigrations({
+        '0002_valid_first.sql': 'create schema valid_first;',
+        ...{ [name.replace('0002', '0003')]: body },
+      });
+      assert.equal(
+        await codeOf(applyScripts(target.connection.pool, 'migration', dir)),
+        'TRANSACTION_CONTROL',
+        name,
+      );
+      const leaked = await q(
+        `select nspname from pg_namespace where nspname in ('atomicity_probe','valid_first')`,
+      );
+      assert.deepEqual(leaked, [], name);
+      assert.equal(
+        (await q(`select count(*)::int as n from system.schema_migrations`))[0].n,
+        1,
+        name,
+      );
+    }
+  });
+
   it('serialises concurrent runners: each script is applied exactly once', async () => {
     const fresh = await createIsolatedDatabase();
     try {

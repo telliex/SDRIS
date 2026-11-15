@@ -114,6 +114,68 @@ describe('findTransactionControl', () => {
     );
   });
 
+  it('ends a line comment at LF, CR or CRLF, exactly as PostgreSQL does (review bypass 1)', () => {
+    for (const eol of ['\n', '\r', '\r\n']) {
+      assert.equal(
+        found(`create schema atomicity_probe; -- comment${eol}COMMIT;${eol}select 1;`),
+        'COMMIT',
+        JSON.stringify(eol),
+      );
+    }
+    assert.equal(found('select 1; -- commit;\rselect 2;'), undefined);
+    assert.equal(found('select 1; -- commit;\r\nselect 2;'), undefined);
+  });
+
+  it('does not mistake ordinary DDL for a function body (review bypass 2)', () => {
+    const lookalike = [
+      'create schema atomicity_probe;',
+      'create domain atomic as integer;',
+      'create table atomicity_probe.t (begin atomic);',
+      'COMMIT;',
+      'select * from no_such_review_table;',
+    ].join('\n');
+    assert.equal(found(lookalike), 'COMMIT');
+    assert.equal(found('create table t (begin atomic); commit;'), 'COMMIT');
+    assert.equal(found('create table t (begin atomic); end; select 1;'), 'END');
+    assert.equal(found('create type begin_atomic as (begin atomic); rollback;'), 'ROLLBACK');
+    // a parameter named begin of type atomic is not a body either
+    assert.equal(
+      found('create function f(begin atomic) returns int language sql as $$select 1$$; commit;'),
+      'COMMIT',
+    );
+    assert.equal(found('alter table t add column begin atomic; commit;'), 'COMMIT');
+  });
+
+  it('keeps checking after a genuine function body, and inside it', () => {
+    const body =
+      'create or replace procedure p() language sql begin atomic select 1; select 2; end;';
+    assert.equal(found(body), undefined);
+    assert.equal(found(`${body} commit;`), 'COMMIT');
+    assert.equal(found(`${body} end;`), 'END');
+    assert.equal(found(`${body}\n${body}`), undefined);
+    assert.equal(
+      found('create function f() returns int language sql begin atomic select 1; commit; end;'),
+      'COMMIT',
+    );
+    assert.equal(
+      found(
+        'create function f() returns int language sql begin atomic select case when true then 1 else 2 end; end;',
+      ),
+      undefined,
+    );
+  });
+
+  it('reports an unterminated function body instead of trusting everything after it', () => {
+    assert.match(
+      found('create function f() returns int language sql begin atomic select 1; commit;') ?? '',
+      /COMMIT/,
+    );
+    assert.match(
+      found('create function f() returns int language sql begin atomic select 1;') ?? '',
+      /BEGIN ATOMIC/,
+    );
+  });
+
   it('is enforced when scripts are loaded, before anything can run', () => {
     const dir = dirWith({ '0001_leaky.sql': 'create schema leaked;\ncommit;\nselect 1;' });
     assert.equal(

@@ -49,8 +49,8 @@ export class MigrationError extends Error {
 
 /**
  * Replaces comments, string literals, quoted identifiers and dollar-quoted bodies with a space so that
- * only SQL structure remains. This is a lexical scan, not a parser; it is deliberately conservative
- * about what it skips (it never skips real statements).
+ * only SQL structure remains. This is a lexical scan, not a parser. It only removes text PostgreSQL
+ * itself treats as non-code; it never skips a statement.
  */
 function stripNonCode(sql: string): string {
   const out: string[] = [];
@@ -60,7 +60,8 @@ function stripNonCode(sql: string): string {
     const c = sql[i]!;
     const next = sql[i + 1];
     if (c === '-' && next === '-') {
-      while (i < sql.length && sql[i] !== '\n') i += 1;
+      // PostgreSQL ends a line comment at either LF or CR (its lexer's non_newline is [^\n\r]).
+      while (i < sql.length && sql[i] !== '\n' && sql[i] !== '\r') i += 1;
       out.push(' ');
     } else if (c === '/' && next === '*') {
       let depth = 1;
@@ -121,33 +122,68 @@ export interface TransactionControl {
   readonly statement: number;
 }
 
+/** Blanks everything inside parentheses, so only text at nesting depth 0 remains. */
+function topLevelOnly(statement: string): string {
+  let depth = 0;
+  let out = '';
+  for (const c of statement) {
+    if (c === '(') {
+      depth += 1;
+      out += ' ';
+    } else if (c === ')') {
+      depth = Math.max(0, depth - 1);
+      out += ' ';
+    } else {
+      out += depth === 0 ? c : ' ';
+    }
+  }
+  return out;
+}
+
+/**
+ * True only for a statement that really opens a SQL-standard function body:
+ * `CREATE [OR REPLACE] FUNCTION|PROCEDURE ... BEGIN ATOMIC` with `BEGIN ATOMIC` outside any parentheses.
+ * A column, type or parameter that merely happens to be called `begin`/`atomic` does not qualify.
+ */
+function opensAtomicBody(words: string[], statement: string): boolean {
+  const head = words[1] === 'or' && words[2] === 'replace' ? words[3] : words[1];
+  if (words[0] !== 'create' || (head !== 'function' && head !== 'procedure')) return false;
+  return /\bbegin\s+atomic\b/.test(topLevelOnly(statement).toLowerCase());
+}
+
 /**
  * Finds a statement that would end or restart the transaction the runner wraps around a script.
  * SAVEPOINT / ROLLBACK TO / RELEASE and a plain PREPARE are allowed: they stay inside the transaction.
+ *
+ * Every statement is checked, including those inside a `BEGIN ATOMIC ... END` function body; the only
+ * thing a body changes is that a lone `END` closes it instead of being reported. A body that is never
+ * closed is reported rather than trusted, because everything after it would otherwise be unchecked.
  */
 export function findTransactionControl(sql: string): TransactionControl | undefined {
   const statements = stripNonCode(sql).split(';');
-  let inAtomicBody = false; // SQL-standard `BEGIN ATOMIC ... END` function bodies contain `;` and `END`
+  let inAtomicBody = false;
+  const at = (keyword: string, index: number): TransactionControl => ({
+    keyword,
+    statement: index + 1,
+  });
   for (let index = 0; index < statements.length; index += 1) {
-    const words = statements[index]!.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const text = statements[index]!;
+    const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const [first, second] = words;
     if (first === undefined) continue;
-    if (inAtomicBody) {
-      if (words.length === 1 && first === 'end') inAtomicBody = false;
+    if (inAtomicBody && words.length === 1 && first === 'end') {
+      inAtomicBody = false;
       continue;
     }
-    if (words.join(' ').includes('begin atomic')) {
-      inAtomicBody = true;
-      continue;
+    if (first === 'start' && second === 'transaction') return at('START TRANSACTION', index);
+    if (first === 'prepare' && second === 'transaction') return at('PREPARE TRANSACTION', index);
+    if (['begin', 'commit', 'end', 'rollback', 'abort'].includes(first)) {
+      if (first === 'rollback' && second === 'to') continue;
+      return at(first.toUpperCase(), index);
     }
-    const at = (keyword: string): TransactionControl => ({ keyword, statement: index + 1 });
-    if (first === 'start' && second === 'transaction') return at('START TRANSACTION');
-    if (first === 'prepare' && second === 'transaction') return at('PREPARE TRANSACTION');
-    if (first === 'rollback' && second === 'to') continue;
-    if (['begin', 'commit', 'end', 'rollback', 'abort'].includes(first))
-      return at(first.toUpperCase());
+    if (!inAtomicBody && opensAtomicBody(words, text)) inAtomicBody = true;
   }
-  return undefined;
+  return inAtomicBody ? at('BEGIN ATOMIC without a closing END', statements.length - 1) : undefined;
 }
 
 export interface ScriptFile {
