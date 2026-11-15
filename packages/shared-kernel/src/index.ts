@@ -14,3 +14,12 @@ export type { KernelError, KernelErrorCode, KernelErrorDetails } from './kernel-
 
 export type { CorrelationId } from './correlation-id';
 export { parseCorrelationId } from './correlation-id';
+
+export type { EntityId, EntityIdGenerator, EntityIdGeneratorOptions } from './entity-id';
+export {
+  isEntityId,
+  parseEntityId,
+  getEntityIdTimestampMs,
+  createEntityIdGenerator,
+  newEntityId,
+} from './entity-id';
