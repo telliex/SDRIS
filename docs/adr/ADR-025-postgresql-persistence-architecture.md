@@ -513,9 +513,13 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
 2. **Domain, Application and Public code stay independent of database infrastructure.** Files under `src/domain`,
    `src/application`, `src/public` (and any other path in a module) may not import ORMs, query builders, database
    drivers or `@sdris/database`, even if their context is allowlisted. Type-only imports and re-exports are included.
-3. **Dependencies point inward.** `src/domain`, `src/application` and `src/public` may not import the same module's
-   `src/infrastructure/**`, directly, through a relative path, an alias, a barrel file or a re-export. A repository
-   adapter implements a port defined in `src/application`; the port never imports the adapter.
+3. **Dependencies point inward.** Only files under a module's `src/infrastructure/**` may import that same module's
+   `src/infrastructure/**`. Every other file in the module (`src/domain`, `src/application`, `src/public`, and any
+   other path such as `src/helpers`, `src/shared` or a `test/` folder) may not, directly, through a relative path, an
+   alias, a barrel file or a re-export. Because an intermediary outside `src/infrastructure/**` cannot import it at all,
+   a barrel cannot launder it, and indirect imports need no separate tracking. A repository adapter implements a port
+   defined in `src/application`; the port never imports the adapter. Tests of an adapter live inside
+   `src/infrastructure/**`.
 4. **Global Infrastructure does not import business modules by default.** `infrastructure/*` may depend only on the
    Shared Kernel, contracts and config. It may not import a business module's public entrypoint or internals. There is
    no exception mechanism in this amendment: any exception requires a further amendment.
@@ -560,7 +564,7 @@ key lists, per module, what its Context Infrastructure may use. Everything not l
 | `dependency/forbidden-external`       | Rules 1 and 2 for ORMs and drivers, including subpaths and type-only imports                          |
 | `dependency/direction`                | Rules 1 and 2 for `@sdris/database`; Rule 4 (Global Infrastructure to business modules); Rule 6 edges |
 | `dependency/manifest`                 | Manifests declaring a non-allowlisted persistence package or Global Infrastructure package (Rule 5)   |
-| `boundary/infrastructure-inversion`   | Rule 3, including relative, alias, barrel, re-export and directory-case spellings                     |
+| `boundary/infrastructure-inversion`   | Rule 3, including relative, alias, barrel (in any path), re-export and directory-case spellings       |
 | `boundary/private-import`             | Rules 6 and 7 for subpath and alias imports; unchanged                                                |
 | `boundary/package-specifier-required` | Rule 7 for relative-path imports into another package; unchanged                                      |
 

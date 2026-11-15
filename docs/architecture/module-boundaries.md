@@ -90,7 +90,7 @@ More cases live in `tests/architecture/fixtures/{valid,invalid}/`; each director
 | `boundary/outside-workspace`          | Import resolving outside every workspace package                                                                                                                                                                |
 | `dependency/direction`                | Layer policy and the module matrix above                                                                                                                                                                        |
 | `dependency/forbidden-external`       | Kernel importing NestJS, Next.js, React or an ORM; contracts, config or testing importing an ORM, query builder or driver; a module importing one outside `src/infrastructure/**` or without an allowlist entry |
-| `boundary/infrastructure-inversion`   | A module's `src/domain`, `src/application` or `src/public` importing its own `src/infrastructure/**` (relative, alias, barrel, re-export)                                                                       |
+| `boundary/infrastructure-inversion`   | Any file of a module outside `src/infrastructure/**` (domain, application, public, helpers, tests, ...) importing that module's `src/infrastructure/**` (relative, alias, barrel, re-export)                    |
 | `dependency/manifest`                 | Kernel `package.json` declaring workspace or framework/ORM dependencies; module, contracts, config or testing manifests declaring an ORM, query builder or driver                                               |
 | `package/entrypoint-location`         | Module entrypoint outside `src/public/`                                                                                                                                                                         |
 | `package/unsupported-exports-pattern` | `exports` wildcard the checker cannot analyse                                                                                                                                                                   |
@@ -144,7 +144,7 @@ published contract cannot serve, and the owning context; the matrix change lands
   specifiers are treated as external.
 - `exports` wildcard patterns and conditional resolution beyond picking declared targets are unsupported.
 - Declared-dependency hygiene (importing `@sdris/x` without listing it in `package.json`) is not checked.
-- `infrastructure/*` packages are scanned as the `infrastructure` layer (Global Infrastructure). `modules/<context>/src/infrastructure/**` is **Context Infrastructure**: the only place in a module where an allowlisted persistence package may be used (proposed in ADR-025 Amendment A1). Domain, application and public code never may, and may not import their own Context Infrastructure.
+- `infrastructure/*` packages are scanned as the `infrastructure` layer (Global Infrastructure). `modules/<context>/src/infrastructure/**` is **Context Infrastructure**: the only place in a module where an allowlisted persistence package may be used (proposed in ADR-025 Amendment A1). Domain, application and public code never may, and no file outside `src/infrastructure/**` may import its own module's Context Infrastructure.
 - Database-level ownership ("never write another module's tables") is out of scope for import checks.
 
 ## Decision evidence and pending Owner decisions
