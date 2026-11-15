@@ -118,6 +118,25 @@ Files live in `infrastructure/database/migrations/` as `NNNN_snake_case.sql`.
   uses real PostgreSQL as ground truth (a `SET LOCAL` sentinel lost when the transaction ends): every script that escapes
   must be flagged and control-free scripts must not be. It covers generated fragments only, so it is evidence, not a proof;
   a SQL parser (for example libpg_query) would be the structural alternative if more assurance is needed.
+- **Supported lexical setting: `standard_conforming_strings = on`, and only that.** The scanner reads plain string
+  literals as PostgreSQL does when it is on (a backslash is an ordinary character). The session can start with it off
+  (connection option, role or database default, or an earlier migration that set it), so the runner executes
+  `SET LOCAL standard_conforming_strings = on` as the first statement of every script's transaction, before the script
+  is sent. PostgreSQL lexes a whole query string once, under the value in force when it is sent (verified against a
+  real server: a `SET ... off` inside the string does not change how the rest of that string is read), so the scanner
+  and the server agree for that script. Because `SET LOCAL` ends with the transaction, the next script is pinned again
+  however the previous one left the session; this is how the runner recovers across files, and why pinning once per
+  connection or per run is not enough (a mutation test proves it). If the pin cannot be set, the script fails and is
+  rolled back, so the runner fails closed. A script may still contain its own `SET standard_conforming_strings`, but it
+  cannot change how that script is read, and the next script is pinned again. No other lexical setting is supported or
+  assumed; settings that do not change how SQL text is tokenised (for example `bytea_output`) are irrelevant.
+- **Test evidence for this:** `migrations.invariant.integration.test.ts` runs the real runner with the setting off from
+  a previous migration, the database default, a connection option and all three together, and asserts on actual side
+  effects and the ledger: a script is either applied with its ledger row or leaves no schema, data or row. Generated
+  scripts (including backslash strings and commit-then-error tails) are checked the same way. The scanner differential
+  no longer skips scripts that raise an error, because a commit followed by an error is the partial-commit case.
+  Role-level defaults reach a session the same way as the database and connection defaults and are not altered by the
+  tests, because the role is shared with the developer's local database.
 - Scripts therefore cannot contain statements that refuse to run in a transaction (`CREATE INDEX CONCURRENTLY`, `VACUUM`).
   A task needing one must raise it for review.
 - No migration is ever run automatically against a shared database; there is no production migration path in Sprint 0.

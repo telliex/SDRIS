@@ -11,6 +11,13 @@ import type { Pool, PoolClient } from 'pg';
  *   adding a script numbered below one already applied is an error: history is append-only.
  *   (Neither Drizzle's nor Kysely's migrator detects an edited applied migration.)
  * - A session advisory lock serialises concurrent runners, so re-running or racing is safe.
+ * - The transaction-control scanner reads string literals the way PostgreSQL does when
+ *   standard_conforming_strings is ON (a backslash in a plain string is an ordinary character). The
+ *   session may start with it OFF (connection option, role or database default, or an earlier migration
+ *   that set it), so every script's transaction begins with `SET LOCAL standard_conforming_strings = on`.
+ *   PostgreSQL lexes a whole query string once, under the value in force when it is sent, so this makes
+ *   the scanner and the server agree for that script, and the next script starts from the same pin
+ *   again however the previous one left the session.
  * - Scripts must not contain their own transaction control (BEGIN, COMMIT, ROLLBACK, END, ...). A script
  *   that committed early would leave its changes behind without a tracking row (non-atomic), so such
  *   files are rejected before any script runs.
@@ -23,6 +30,8 @@ const TRACKING_TABLE: Record<ScriptKind, string> = {
 };
 /** Arbitrary constant identifying SDRIS's script-runner advisory lock. */
 const ADVISORY_LOCK_KEY = 7204051;
+/** The one lexical session setting the scanner depends on; see the header comment. */
+const LEXICAL_PIN = 'set local standard_conforming_strings = on';
 const FILE_NAME = /^(\d{4})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$/;
 
 export type MigrationErrorCode =
@@ -374,6 +383,7 @@ export async function applyScripts(pool: Pool, kind: ScriptKind, dir: string): P
       if (statuses.find((s) => s.version === file.version)?.state !== 'pending') continue;
       try {
         await client.query('begin');
+        await client.query(LEXICAL_PIN);
         await client.query(file.sql);
         await client.query(
           `insert into ${TRACKING_TABLE[kind]} (version, name, checksum) values ($1, $2, $3)`,
