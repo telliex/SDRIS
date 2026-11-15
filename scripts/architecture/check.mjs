@@ -276,18 +276,18 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           if (pkg.layer === 'module' && target.resolvedFile !== undefined) {
             const from = zoneOf(pkg, file);
             if (
-              ['domain', 'application', 'public'].includes(from) &&
+              from !== CONTEXT_INFRASTRUCTURE_ZONE &&
               zoneOf(pkg, target.resolvedFile, { ignoreCase: true }) === CONTEXT_INFRASTRUCTURE_ZONE
             ) {
               violate(
                 'boundary/infrastructure-inversion',
                 rel(file),
                 imp.line,
-                `${from} code in ${pkg.name} imports its own Context Infrastructure (${rel(target.resolvedFile)}); dependencies must point inward.`,
+                `${from === 'other' ? 'Code outside the named zones' : from + ' code'} in ${pkg.name} imports its own Context Infrastructure (${rel(target.resolvedFile)}); dependencies must point inward.`,
                 {
                   specifier: imp.specifier,
                   from: pkg.name,
-                  hint: 'Depend on a port in src/application and let the infrastructure adapter implement it; never re-export infrastructure from src/public.',
+                  hint: 'Only src/infrastructure/** may import it. Depend on a port in src/application and let the adapter implement it; a barrel elsewhere cannot re-export infrastructure.',
                 },
               );
             }
