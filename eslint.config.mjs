@@ -1,22 +1,4 @@
-import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import prettier from 'eslint-config-prettier';
-import globals from 'globals';
+import { base, prettier } from './eslint.base.mjs';
+import { nextConfig } from './eslint.next.mjs';
 
-export default tseslint.config(
-  {
-    ignores: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/.next/**',
-      '**/coverage/**',
-      '**/next-env.d.ts',
-    ],
-  },
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    languageOptions: { globals: { ...globals.node } },
-  },
-  prettier,
-);
+export default [...base, nextConfig(['apps/web/**/*.{js,mjs,ts,tsx}']), prettier];
