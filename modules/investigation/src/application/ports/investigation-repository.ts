@@ -5,7 +5,8 @@ import type { TransactionToken } from './transaction-scope';
 export type RepositoryErrorCode =
   | 'investigation.case_already_exists'
   | 'investigation.concurrency_conflict'
-  | 'investigation.observation_id_in_use';
+  | 'investigation.observation_id_in_use'
+  | 'investigation.uut_mismatch';
 
 export type RepositoryError = SdrisError<
   RepositoryErrorCode,

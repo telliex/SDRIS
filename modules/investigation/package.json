@@ -6,15 +6,27 @@
   "types": "src/public/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.spec.ts\"",
-    "test:integration": "tsx --test --test-concurrency=1 \"src/**/*.integration.test.ts\""
+    "test": "tsx --test \"src/**/*.spec.ts\""
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },
+  "exports": {
+    ".": "./src/public/index.ts",
+    "./composition": "./src/composition/index.ts"
+  },
+  "typesVersions": {
+    "*": {
+      "composition": [
+        "src/composition/index.ts"
+      ]
+    }
+  },
   "dependencies": {
-    "@sdris/shared-kernel": "workspace:^"
+    "@sdris/database": "workspace:^",
+    "@sdris/shared-kernel": "workspace:^",
+    "drizzle-orm": "^0.45.4"
   }
 }

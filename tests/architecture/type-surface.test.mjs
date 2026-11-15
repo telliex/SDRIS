@@ -190,3 +190,52 @@ test('CLI: a public entrypoint that exposes the adapter fails with public/type-s
   assert.equal(cli.status, 1, cli.stdout + cli.stderr);
   assert.match(cli.stderr, /public\/type-surface-leak/);
 });
+
+// ---- The real Investigation entrypoints ------------------------------------------------------------
+test('the real Investigation composition entrypoint has a clean, fully typed surface and a real declaration', () => {
+  const entry = path.join(repoRoot, 'modules/investigation/src/composition/index.ts');
+  const program = createSurfaceProgram([entry], {
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  });
+  const result = analyzeEntrypoint(program, entry, {
+    infrastructureDirs: [path.join(repoRoot, 'modules/investigation/src/infrastructure')],
+    databaseDirs: [path.join(repoRoot, 'infrastructure/database')],
+    databaseSpecifiers: ['@sdris/database'],
+    approvedDatabaseTypes: ['PersistenceHandle'],
+    requireExplicitReturnTypes: true,
+  });
+  assert.deepEqual(result.leaks, [], JSON.stringify(result.leaks, null, 2));
+  assert.deepEqual(result.missingReturnTypes, []);
+  assert.deepEqual(result.declarationLeaks, []);
+  assert.deepEqual([...result.exports].sort(), [
+    'InvestigationModule',
+    'InvestigationModuleOptions',
+    'createInvestigationModule',
+  ]);
+  assert.match(
+    result.declarationText,
+    /export declare function createInvestigationModule\(persistence: PersistenceHandle, options\?: InvestigationModuleOptions\): InvestigationModule;/,
+  );
+  // Comments may mention these words; the declared types must not.
+  const code = result.declarationText.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(code, /infrastructure|drizzle|pg-core|UnitOfWork|executorOf/i);
+});
+
+test('the real Investigation public entrypoint names no persistence type at all', () => {
+  const entry = path.join(repoRoot, 'modules/investigation/src/public/index.ts');
+  const program = createSurfaceProgram([entry], {
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  });
+  const result = analyzeEntrypoint(program, entry, {
+    infrastructureDirs: [path.join(repoRoot, 'modules/investigation/src/infrastructure')],
+    databaseDirs: [path.join(repoRoot, 'infrastructure/database')],
+    databaseSpecifiers: ['@sdris/database'],
+    approvedDatabaseTypes: [],
+    requireExplicitReturnTypes: false,
+  });
+  assert.deepEqual(result.leaks, [], JSON.stringify(result.leaks, null, 2));
+  assert.deepEqual(result.declarationLeaks, []);
+  assert.doesNotMatch(result.declarationText ?? '', /PersistenceHandle|drizzle|infrastructure/i);
+});

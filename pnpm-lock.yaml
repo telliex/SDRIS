@@ -149,9 +149,15 @@ importers:
 
   modules/investigation:
     dependencies:
+      '@sdris/database':
+        specifier: workspace:^
+        version: link:../../infrastructure/database
       '@sdris/shared-kernel':
         specifier: workspace:^
         version: link:../../packages/shared-kernel
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@types/pg@8.23.1)(pg@8.23.1)
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

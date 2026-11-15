@@ -75,7 +75,10 @@ test('the real repository complies and the command runs from a clean checkout', 
   const cli = runCli([]);
   assert.equal(cli.status, 0, cli.stdout + cli.stderr);
   assert.match(cli.stdout, /PASS: architecture boundaries hold \(17 packages/);
-  const { violations } = checkArchitecture({ root: repoRoot });
+  const { violations } = checkArchitecture({
+    root: repoRoot,
+    matrixPath: path.join(repoRoot, 'scripts/architecture/dependency-matrix.json'),
+  });
   assert.deepEqual(violations, []);
 });
 
@@ -86,18 +89,27 @@ test('the default matrix grants no module-to-module dependency', async () => {
   assert.deepEqual(matrix.moduleDependencies, {});
 });
 
-test('the default policy grants no context-infrastructure access', async () => {
+test('the committed policy authorises only the Investigation context, and nothing else', async () => {
   const { default: matrix } = await import('../../scripts/architecture/dependency-matrix.json', {
     with: { type: 'json' },
   });
-  assert.deepEqual(matrix.contextInfrastructure, {});
+  assert.deepEqual(matrix.moduleDependencies, {});
+  assert.deepEqual(matrix.contextInfrastructure, {
+    '@sdris/investigation': {
+      workspacePackages: ['@sdris/database'],
+      externalPackages: ['drizzle-orm'],
+    },
+  });
 });
 
-test('the default policy authorises no composition root', async () => {
+test('the committed policy authorises exactly apps/api/src/composition/** for Investigation, and no worker', async () => {
   const { default: matrix } = await import('../../scripts/architecture/dependency-matrix.json', {
     with: { type: 'json' },
   });
-  assert.deepEqual(matrix.compositionRoots ?? {}, {});
+  assert.deepEqual(matrix.compositionRoots, {
+    '@sdris/investigation': { packages: ['@sdris/api'], paths: ['apps/api/src/composition/**'] },
+  });
+  assert.ok(!JSON.stringify(matrix.compositionRoots).includes('worker'));
 });
 
 const MALFORMED_COMPOSITION_ROOTS = {
