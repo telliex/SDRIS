@@ -23,3 +23,15 @@ export {
   createEntityIdGenerator,
   newEntityId,
 } from './entity-id';
+
+export type { EntityRef } from './entity-ref';
+export { isEntityType, createEntityRef, parseEntityRef, entityRefEquals } from './entity-ref';
+
+export type { Revision, RevisionRef } from './revision-ref';
+export {
+  parseRevision,
+  parseRevisionRef,
+  createRevisionRef,
+  revisionEquals,
+  revisionRefEquals,
+} from './revision-ref';
