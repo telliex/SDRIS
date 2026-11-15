@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/helpers/db.ts"
+    }
+  ],
+  "messageIncludes": "zone \"other\""
+}

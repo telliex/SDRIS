@@ -1,0 +1,13 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/infrastructure/persistence/repo.ts"
+    },
+    {
+      "rule": "dependency/direction",
+      "file": "modules/investigation/src/infrastructure/persistence/repo.ts"
+    }
+  ],
+  "messageIncludes": "not allowlisted"
+}

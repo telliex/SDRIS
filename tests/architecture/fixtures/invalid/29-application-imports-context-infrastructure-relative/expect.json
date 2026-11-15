@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/infrastructure-inversion",
+      "file": "modules/investigation/src/application/use-case.ts"
+    }
+  ]
+}

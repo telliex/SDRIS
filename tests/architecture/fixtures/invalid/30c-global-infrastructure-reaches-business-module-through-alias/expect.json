@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/private-import",
+      "file": "infrastructure/database/src/index.ts"
+    }
+  ]
+}

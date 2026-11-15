@@ -2,7 +2,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { extractImports } from './imports.mjs';
 import { resolveAlias, resolveFile } from './resolve.mjs';
-import { isTestFile, listSourceFiles, loadWorkspace, ownerOf, toPosix } from './workspace.mjs';
+import {
+  isTestFile,
+  listSourceFiles,
+  loadWorkspace,
+  ownerOf,
+  toPosix,
+  zoneOf,
+} from './workspace.mjs';
 
 /**
  * Layer dependency policy. A layer may import only the listed layers (always via the target
@@ -38,9 +45,61 @@ const KERNEL_FORBIDDEN_EXTERNALS = [
 /** Layers that hold domain logic or public contracts and so must stay persistence-independent. */
 const PERSISTENCE_FREE_LAYERS = new Set(['kernel', 'contracts', 'config', 'module', 'testing']);
 
-function loadMatrix(matrixPath) {
-  if (!matrixPath || !existsSync(matrixPath)) return {};
-  return JSON.parse(readFileSync(matrixPath, 'utf8')).moduleDependencies ?? {};
+/** Zones of a module package in which persistence libraries may be used (Context Infrastructure). */
+const CONTEXT_INFRASTRUCTURE_ZONE = 'infrastructure';
+
+const npmPackageName = (specifier) =>
+  specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
+const isPersistenceExternal = (specifier) => PERSISTENCE_EXTERNALS.some((re) => re.test(specifier));
+
+/**
+ * The centralised, explicit dependency policy file (PROPOSED). `moduleDependencies` lists approved
+ * module-to-module edges. `contextInfrastructure` lists, per module, the Global Infrastructure workspace
+ * packages and the persistence npm packages that module's `src/infrastructure/**` may use. Everything
+ * not listed is denied. Source-path restrictions (zones) always apply on top of the list.
+ */
+function loadPolicy(matrixPath) {
+  if (!matrixPath || !existsSync(matrixPath))
+    return { moduleDependencies: {}, contextInfrastructure: {} };
+  const raw = JSON.parse(readFileSync(matrixPath, 'utf8'));
+  return {
+    moduleDependencies: raw.moduleDependencies ?? {},
+    contextInfrastructure: raw.contextInfrastructure ?? {},
+  };
+}
+
+/** Rejects a malformed allowlist so a typo cannot silently grant or deny access. Throws (exit 2). */
+function validatePolicy(policy, packages) {
+  const fail = (message) => {
+    throw new Error(`invalid dependency policy: ${message}`);
+  };
+  const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+  for (const [name, entry] of Object.entries(policy.contextInfrastructure)) {
+    const owner = packages.find((p) => p.name === name);
+    if (!owner || owner.layer !== 'module')
+      fail(`contextInfrastructure key "${name}" is not a module package`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      fail(`contextInfrastructure["${name}"] must be an object`);
+    for (const key of Object.keys(entry)) {
+      if (key !== 'workspacePackages' && key !== 'externalPackages')
+        fail(`contextInfrastructure["${name}"] has unknown property "${key}"`);
+      if (!isStringArray(entry[key]))
+        fail(`contextInfrastructure["${name}"].${key} must be a string array`);
+    }
+    for (const dep of entry.workspacePackages ?? []) {
+      const target = packages.find((p) => p.name === dep);
+      if (!target || target.layer !== 'infrastructure')
+        fail(
+          `"${dep}" (allowed for ${name}) is not a Global Infrastructure package under infrastructure/*`,
+        );
+    }
+    for (const dep of entry.externalPackages ?? []) {
+      if (!isPersistenceExternal(dep))
+        fail(
+          `"${dep}" (allowed for ${name}) is not a recognised persistence package; nothing to allow`,
+        );
+    }
+  }
 }
 
 /**
@@ -55,7 +114,9 @@ export function checkArchitecture({ root, matrixPath } = {}) {
       `no workspace packages found under ${root} (expected apps/*, modules/*, packages/*, infrastructure/*)`,
     );
   }
-  const matrix = loadMatrix(matrixPath);
+  const policy = loadPolicy(matrixPath);
+  validatePolicy(policy, packages);
+  const matrix = policy.moduleDependencies;
   const byName = new Map(packages.map((p) => [p.name, p]));
   const violations = [];
   const notes = [];
@@ -104,7 +165,10 @@ export function checkArchitecture({ root, matrixPath } = {}) {
       for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
         for (const dep of Object.keys(pkg.manifest[field] ?? {})) {
           const internal = pkg.layer === 'kernel' && dep.startsWith('@sdris/');
-          if (internal || forbidden.some((re) => re.test(dep))) {
+          const allowlisted =
+            pkg.layer === 'module' &&
+            (policy.contextInfrastructure[pkg.name]?.externalPackages ?? []).includes(dep);
+          if (!allowlisted && (internal || forbidden.some((re) => re.test(dep)))) {
             violate(
               'dependency/manifest',
               manifestFile,
@@ -112,6 +176,27 @@ export function checkArchitecture({ root, matrixPath } = {}) {
               pkg.layer === 'kernel'
                 ? `Shared Kernel must not declare ${field}.${dep}.`
                 : `${pkg.name} (${pkg.layer}) must stay persistence-independent; it declares ${field}.${dep}.`,
+              {
+                from: pkg.name,
+                to: dep,
+                hint:
+                  pkg.layer === 'module'
+                    ? 'Add it to contextInfrastructure in the dependency policy (needs an ADR); do not edit around the check.'
+                    : undefined,
+              },
+            );
+          }
+          const depPackage = byName.get(dep);
+          if (
+            pkg.layer === 'module' &&
+            depPackage?.layer === 'infrastructure' &&
+            !(policy.contextInfrastructure[pkg.name]?.workspacePackages ?? []).includes(dep)
+          ) {
+            violate(
+              'dependency/manifest',
+              manifestFile,
+              1,
+              `${pkg.name} declares ${field}.${dep} (Global Infrastructure) but is not in the context-infrastructure allowlist.`,
               { from: pkg.name, to: dep },
             );
           }
@@ -151,19 +236,29 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           } else if (
             pkg.layer !== 'kernel' &&
             PERSISTENCE_FREE_LAYERS.has(pkg.layer) &&
-            PERSISTENCE_EXTERNALS.some((re) => re.test(imp.specifier))
+            isPersistenceExternal(imp.specifier)
           ) {
-            violate(
-              'dependency/forbidden-external',
-              rel(file),
-              imp.line,
-              `${pkg.name} (${pkg.layer}) must stay persistence-independent; it imports "${imp.specifier}".`,
-              {
-                specifier: imp.specifier,
-                from: pkg.name,
-                hint: 'ORM, query-builder and driver code belongs in infrastructure/* adapters behind a port.',
-              },
-            );
+            const zone = pkg.layer === 'module' ? zoneOf(pkg, file) : undefined;
+            const allowed =
+              zone === CONTEXT_INFRASTRUCTURE_ZONE &&
+              (policy.contextInfrastructure[pkg.name]?.externalPackages ?? []).includes(
+                npmPackageName(imp.specifier),
+              );
+            if (!allowed) {
+              violate(
+                'dependency/forbidden-external',
+                rel(file),
+                imp.line,
+                pkg.layer === 'module'
+                  ? `${pkg.name} may use "${imp.specifier}" only from src/infrastructure/** and only if allowlisted; this file is in zone "${zone}"${zone === CONTEXT_INFRASTRUCTURE_ZONE ? ' and the package is not allowlisted' : ''}.`
+                  : `${pkg.name} (${pkg.layer}) must stay persistence-independent; it imports "${imp.specifier}".`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'ORM, query-builder and driver code belongs in Context Infrastructure (modules/<context>/src/infrastructure/**, allowlisted) or Global Infrastructure (infrastructure/*), behind a port.',
+                },
+              );
+            }
           }
           continue;
         }
@@ -177,9 +272,37 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           if (target.owner) edges.push(edge(pkg, target.owner, file, imp, rel));
           continue;
         }
-        if (target.owner === pkg) continue;
+        if (target.owner === pkg) {
+          if (pkg.layer === 'module' && target.resolvedFile !== undefined) {
+            const from = zoneOf(pkg, file);
+            if (
+              ['domain', 'application', 'public'].includes(from) &&
+              zoneOf(pkg, target.resolvedFile, { ignoreCase: true }) === CONTEXT_INFRASTRUCTURE_ZONE
+            ) {
+              violate(
+                'boundary/infrastructure-inversion',
+                rel(file),
+                imp.line,
+                `${from} code in ${pkg.name} imports its own Context Infrastructure (${rel(target.resolvedFile)}); dependencies must point inward.`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'Depend on a port in src/application and let the infrastructure adapter implement it; never re-export infrastructure from src/public.',
+                },
+              );
+            }
+          }
+          continue;
+        }
         edges.push(edge(pkg, target.owner, file, imp, rel));
-        const denial = directionDenial(pkg, target.owner, isTestFile(file), matrix);
+        const denial = directionDenial(
+          pkg,
+          target.owner,
+          isTestFile(file),
+          matrix,
+          policy,
+          zoneOf(pkg, file),
+        );
         if (denial) {
           violate('dependency/direction', rel(file), imp.line, denial, {
             specifier: imp.specifier,
@@ -280,7 +403,7 @@ function classify({ pkg, file, imp, root }, packages, byName) {
       },
     };
   }
-  if (owner === pkg) return { owner };
+  if (owner === pkg) return { owner, resolvedFile: resolveFile(abs) ?? abs };
 
   // Compare the one file the import actually resolves to. An unresolvable target is not published.
   const resolvedFile = resolveFile(abs);
@@ -309,8 +432,20 @@ function classify({ pkg, file, imp, root }, packages, byName) {
   return { owner };
 }
 
-function directionDenial(from, to, testFile, matrix) {
+function directionDenial(from, to, testFile, matrix, policy, zone) {
   if (from.layer === undefined || to.layer === undefined) return undefined; // reported elsewhere
+  if (from.layer === 'module' && to.layer === 'infrastructure') {
+    // Context Infrastructure only: a source-path restriction plus the explicit allowlist.
+    if (zone !== CONTEXT_INFRASTRUCTURE_ZONE) {
+      return `${from.name} code outside src/infrastructure/** (zone "${zone}") may not depend on Global Infrastructure (${to.name}).`;
+    }
+    return (policy.contextInfrastructure[from.name]?.workspacePackages ?? []).includes(to.name)
+      ? undefined
+      : `${to.name} (Global Infrastructure) is not in the context-infrastructure allowlist for ${from.name}.`;
+  }
+  if (from.layer === 'infrastructure' && to.layer === 'module') {
+    return `Global Infrastructure (${from.name}) may not import business module ${to.name}; there is no default exception.`;
+  }
   if (from.layer === 'module' && to.layer === 'module') {
     return (matrix[from.name] ?? []).includes(to.name)
       ? undefined
