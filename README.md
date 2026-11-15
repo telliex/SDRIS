@@ -55,7 +55,7 @@ specific workspace the same way (`pnpm --filter @sdris/api add <pkg>`), not at t
 ## Database (PostgreSQL)
 
 Persistence uses Drizzle ORM with hand-written SQL migrations in `infrastructure/database` (`@sdris/database`).
-Decision record, schema ownership and Owner decisions: [docs/architecture/persistence.md](docs/architecture/persistence.md).
+Decision record: [ADR-025](docs/adr/ADR-025-postgresql-persistence-architecture.md) (PROPOSED). Implementation notes, schema ownership and open items: [docs/architecture/persistence.md](docs/architecture/persistence.md).
 
 ```bash
 pnpm db:up        # start PostgreSQL on 127.0.0.1:5432 and wait until healthy
