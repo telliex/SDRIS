@@ -205,37 +205,27 @@ A passing TypeScript build does not authorize an otherwise forbidden dependency.
 
 ## 7. Decision 5 — UnitOfWork and TransactionContext
 
-**Decision: CONDITIONAL — Keep the current implementation internal to the database infrastructure until the first domain repository is implemented.**
+**Decision: CONDITIONAL — Retain the current infrastructure-owned transaction abstraction until its application-facing contract is validated in S0-05.**
 
-The S0-04 `UnitOfWork` and `TransactionContext` primitives demonstrate transactional capability.
+The current `UnitOfWork` and `TransactionContext` interfaces are exported by `@sdris/database` for infrastructure-level integration.
 
-Their final public contract ownership remains deferred.
+This export does not authorize domain or application modules to depend directly on database infrastructure.
+
+Architecture boundary rules remain authoritative.
+
+The final ownership and public exposure of these interfaces are deferred until S0-05 validates them against a real Investigation repository adapter.
 
 ### Requirements
 
-A future application-facing transaction abstraction must:
+- No Drizzle or PostgreSQL driver types may leak into domain contracts.
+- Domain models must remain persistence-independent.
+- Transaction context must be opaque to domain logic.
+- Repository adapters may use database transaction infrastructure only through explicitly approved dependency boundaries.
+- Any expansion of module access to `@sdris/database` requires positive and negative architecture tests.
 
-- Avoid exposing Drizzle transaction types.
-- Avoid exposing PostgreSQL connection objects.
-- Support explicit commit and rollback semantics.
-- Preserve transaction context across participating repositories.
-- Make transaction ownership and lifetime explicit.
-- Prevent reuse of an invalidated transaction context.
-- Allow errors to propagate without silently committing partial changes.
+S0-05 must determine whether the transaction port should remain infrastructure-owned or move to an application-facing persistence contract.
 
-### Design constraint
-
-Do not move `UnitOfWork` into Shared Kernel solely because multiple modules need transactions.
-
-Shared Kernel is reserved for minimal, domain-neutral primitives.
-
-A dedicated persistence contract or application-level port may be introduced when justified by actual S0-05 usage.
-
-### Required follow-up
-
-S0-05 must evaluate the transaction abstraction using a real Investigation aggregate repository.
-
-If the current interface is insufficient, propose a contract revision before expanding usage.
+Do not move it into Shared Kernel without a separate architectural justification.
 
 ## 8. Decision 6 — Module-Owned Repository Adapters
 
