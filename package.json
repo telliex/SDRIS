@@ -16,7 +16,14 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check:architecture": "node scripts/check-architecture.mjs"
+    "check:architecture": "node scripts/check-architecture.mjs",
+    "db:up": "docker compose -f deploy/local/docker-compose.yml up -d --wait",
+    "db:down": "docker compose -f deploy/local/docker-compose.yml down",
+    "db:migrate": "pnpm --filter @sdris/database run cli migrate",
+    "db:status": "pnpm --filter @sdris/database run cli status",
+    "db:seed": "pnpm --filter @sdris/database run cli seed",
+    "db:reset": "pnpm --filter @sdris/database run cli reset",
+    "db:test": "pnpm --filter @sdris/database run test:integration"
   },
   "devDependencies": {
     "@eslint/js": "^9",

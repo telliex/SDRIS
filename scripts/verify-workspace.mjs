@@ -14,10 +14,12 @@ const modules = [
 ];
 const packages = ['shared-kernel', 'contracts', 'testing', 'config'];
 const apps = ['web', 'api', 'worker'];
+const infrastructure = ['database'];
 for (const [folder, names] of [
   ['modules', modules],
   ['packages', packages],
   ['apps', apps],
+  ['infrastructure', infrastructure],
 ]) {
   for (const name of names) {
     const path = join(root, folder, name, 'package.json');
@@ -39,5 +41,5 @@ for (const file of [
   if (!existsSync(join(root, file))) throw new Error(`Missing foundation file: ${file}`);
 }
 console.log(
-  `PASS: ${apps.length} apps, ${modules.length} modules, ${packages.length} shared packages, public boundaries and baseline files`,
+  `PASS: ${apps.length} apps, ${modules.length} modules, ${packages.length} shared packages, ${infrastructure.length} infrastructure package, public boundaries and baseline files`,
 );
