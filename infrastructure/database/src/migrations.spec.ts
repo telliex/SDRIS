@@ -58,14 +58,44 @@ describe('loadScripts', () => {
   });
 });
 
-describe('committed baseline migration', () => {
-  it('creates exactly the schemas in the ownership map and no tables', () => {
-    const migrations = loadScripts(path.resolve(__dirname, '..', 'migrations'));
+describe('committed migrations', () => {
+  const migrations = loadScripts(path.resolve(__dirname, '..', 'migrations'));
+
+  it('the baseline creates exactly the schemas in the ownership map and no tables', () => {
     assert.equal(migrations[0]?.fileName, '0001_create_bounded_context_schemas.sql');
-    const sql = migrations.map((m) => m.sql).join('\n');
-    const created = [...sql.matchAll(/create schema if not exists (\w+);/g)].map((m) => m[1]);
+    const created = [...migrations[0]!.sql.matchAll(/create schema if not exists (\w+);/g)].map(
+      (m) => m[1],
+    );
     assert.deepEqual([...created].sort(), [...SCHEMA_NAMES].sort());
-    assert.doesNotMatch(sql, /create\s+table/i, 'S0-04 must not create business tables');
+    assert.doesNotMatch(
+      migrations[0]!.sql,
+      /create\s+table/i,
+      'the baseline must not create business tables',
+    );
+  });
+
+  it('every later table is created inside an existing owner schema, never unqualified', () => {
+    for (const migration of migrations.slice(1)) {
+      const tables = [...migration.sql.matchAll(/create\s+table\s+([\w.]+)/gi)].map((m) => m[1]!);
+      for (const table of tables) {
+        const [schema, name] = table.split('.');
+        assert.ok(name, `${migration.fileName}: ${table} must be schema-qualified`);
+        assert.ok(
+          (SCHEMA_NAMES as readonly string[]).includes(schema!),
+          `${migration.fileName}: unknown schema ${schema}`,
+        );
+      }
+    }
+  });
+
+  it('the Investigation tables live only in the investigation schema', () => {
+    const sql = migrations.map((m) => m.sql).join('\n');
+    assert.match(sql, /create table investigation\.investigation_case/);
+    assert.match(sql, /create table investigation\.failure_observation/);
+    assert.match(
+      sql,
+      /foreign key \(case_id, uut_id\) references investigation\.investigation_case \(id, uut_id\)/,
+    );
   });
 });
 

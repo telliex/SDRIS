@@ -5,13 +5,15 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { promisify } from 'node:util';
-import { applyScripts, MigrationError, scriptStatus } from './migrations';
+import { applyScripts, loadScripts, MigrationError, scriptStatus } from './migrations';
 import { SCHEMA_NAMES, SCHEMA_OWNERSHIP } from './schemas';
 import { createIsolatedDatabase, type IsolatedDatabase } from './testing/isolated-database';
 
 const run = promisify(execFile);
 const MIGRATIONS = path.resolve(__dirname, '..', 'migrations');
 const SEEDS = path.resolve(__dirname, '..', 'seeds');
+/** Number of committed migrations; derived so adding a migration does not break the counting tests. */
+const COMMITTED = loadScripts(MIGRATIONS).length;
 
 /** Copies the committed migrations to a scratch dir so a test can add or tamper with files. */
 const scratchMigrations = (extra: Record<string, string> = {}): string => {
@@ -42,7 +44,10 @@ describe('migrations against real PostgreSQL', () => {
 
   it('applies the baseline to a fresh database and creates every owned schema', async () => {
     const applied = await applyScripts(target.connection.pool, 'migration', MIGRATIONS);
-    assert.deepEqual(applied, ['0001_create_bounded_context_schemas.sql']);
+    assert.deepEqual(applied, [
+      '0001_create_bounded_context_schemas.sql',
+      '0002_create_investigation_case_tables.sql',
+    ]);
     const rows = await q(
       `select nspname, obj_description(oid, 'pg_namespace') as description from pg_namespace where nspname = any($1)`,
       [SCHEMA_NAMES],
@@ -52,12 +57,16 @@ describe('migrations against real PostgreSQL', () => {
       assert.equal(row.description, SCHEMA_OWNERSHIP[row.nspname as keyof typeof SCHEMA_OWNERSHIP]);
   });
 
-  it('creates no business tables: only the system tracking table exists', async () => {
+  it('creates only the tracking table and the Investigation tables, each in its owning schema', async () => {
     const rows = await q(
-      `select table_schema, table_name from information_schema.tables where table_schema = any($1)`,
+      `select table_schema, table_name from information_schema.tables where table_schema = any($1) order by 1, 2`,
       [SCHEMA_NAMES],
     );
-    assert.deepEqual(rows, [{ table_schema: 'system', table_name: 'schema_migrations' }]);
+    assert.deepEqual(rows, [
+      { table_schema: 'investigation', table_name: 'failure_observation' },
+      { table_schema: 'investigation', table_name: 'investigation_case' },
+      { table_schema: 'system', table_name: 'schema_migrations' },
+    ]);
   });
 
   it('is repeatable: re-running applies nothing and duplicates nothing', async () => {
@@ -70,23 +79,25 @@ describe('migrations against real PostgreSQL', () => {
       SCHEMA_NAMES,
     ]);
     assert.deepEqual(after, before);
-    assert.equal((await q('select count(*)::int as n from system.schema_migrations'))[0].n, 1);
+    assert.equal((await q('select count(*)::int as n from system.schema_migrations'))[0].n, 2);
   });
 
   it('makes applied versions observable with a checksum', async () => {
     const status = await scriptStatus(target.connection.pool, 'migration', MIGRATIONS);
-    assert.equal(status.length, 1);
-    assert.equal(status[0]!.state, 'applied');
+    assert.equal(status.length, 2);
+    assert.ok(status.every((s) => s.state === 'applied'));
     assert.ok(status[0]!.appliedAt instanceof Date);
-    const [row] = await q('select version, name, checksum from system.schema_migrations');
+    const [row] = await q(
+      'select version, name, checksum from system.schema_migrations order by version',
+    );
     assert.equal(row.version, '0001');
     assert.match(row.checksum, /^[0-9a-f]{64}$/);
   });
 
   it('applies a newly added migration exactly once', async () => {
-    const dir = scratchMigrations({ '0002_add_probe_schema.sql': 'create schema probe_a; ' });
+    const dir = scratchMigrations({ '0900_add_probe_schema.sql': 'create schema probe_a; ' });
     assert.deepEqual(await applyScripts(target.connection.pool, 'migration', dir), [
-      '0002_add_probe_schema.sql',
+      '0900_add_probe_schema.sql',
     ]);
     assert.deepEqual(await applyScripts(target.connection.pool, 'migration', dir), []);
     assert.equal(
@@ -94,7 +105,7 @@ describe('migrations against real PostgreSQL', () => {
       1,
     );
     await q('drop schema probe_a');
-    await q(`delete from system.schema_migrations where version = '0002'`);
+    await q(`delete from system.schema_migrations where version = '0900'`);
   });
 
   it('rejects an edited applied migration and changes nothing', async () => {
@@ -140,7 +151,7 @@ describe('migrations against real PostgreSQL', () => {
 
   it('rolls back a failing migration, records nothing, and reports the file', async () => {
     const dir = scratchMigrations({
-      '0002_half_done.sql': 'create schema half_done; select * from table_that_does_not_exist;',
+      '0900_half_done.sql': 'create schema half_done; select * from table_that_does_not_exist;',
     });
     try {
       await applyScripts(target.connection.pool, 'migration', dir);
@@ -148,7 +159,7 @@ describe('migrations against real PostgreSQL', () => {
     } catch (error) {
       assert.ok(error instanceof MigrationError);
       assert.equal(error.code, 'SCRIPT_FAILED');
-      assert.equal(error.file, '0002_half_done.sql');
+      assert.equal(error.file, '0900_half_done.sql');
       assert.match(error.message, /table_that_does_not_exist/);
     }
     assert.equal(
@@ -156,7 +167,7 @@ describe('migrations against real PostgreSQL', () => {
       0,
     );
     assert.equal(
-      (await q(`select count(*)::int as n from system.schema_migrations where version='0002'`))[0]
+      (await q(`select count(*)::int as n from system.schema_migrations where version='0900'`))[0]
         .n,
       0,
     );
@@ -165,7 +176,7 @@ describe('migrations against real PostgreSQL', () => {
   it('runs each script inside one explicit transaction together with its tracking row', async () => {
     // VACUUM is rejected inside a transaction block even as a lone statement, so this only fails
     // if the runner really wraps the script (and its tracking insert) in BEGIN ... COMMIT.
-    const dir = scratchMigrations({ '0002_needs_no_transaction.sql': 'vacuum;' });
+    const dir = scratchMigrations({ '0900_needs_no_transaction.sql': 'vacuum;' });
     try {
       await applyScripts(target.connection.pool, 'migration', dir);
       assert.fail('expected the script to be rejected inside a transaction block');
@@ -175,7 +186,7 @@ describe('migrations against real PostgreSQL', () => {
       assert.match(error.message, /transaction block/);
     }
     assert.equal(
-      (await q(`select count(*)::int as n from system.schema_migrations where version='0002'`))[0]
+      (await q(`select count(*)::int as n from system.schema_migrations where version='0900'`))[0]
         .n,
       0,
     );
@@ -185,7 +196,7 @@ describe('migrations against real PostgreSQL', () => {
     // Regression: `COMMIT` inside a script ended the runner's transaction, so a later failure left
     // the schema change in place with no tracking row (non-atomic).
     const dir = scratchMigrations({
-      '0002_commits_early.sql':
+      '0900_commits_early.sql':
         'create schema committed_early;\ncommit;\nselect * from table_that_does_not_exist;',
     });
     assert.equal(
@@ -197,7 +208,7 @@ describe('migrations against real PostgreSQL', () => {
       0,
     );
     assert.equal(
-      (await q(`select count(*)::int as n from system.schema_migrations where version='0002'`))[0]
+      (await q(`select count(*)::int as n from system.schema_migrations where version='0900'`))[0]
         .n,
       0,
     );
@@ -205,8 +216,8 @@ describe('migrations against real PostgreSQL', () => {
 
   it('does not run an earlier valid script when a later one is rejected', async () => {
     const dir = scratchMigrations({
-      '0002_fine.sql': 'create schema fine_but_blocked;',
-      '0003_rollback_inside.sql': 'create schema x_rb; rollback;',
+      '0900_fine.sql': 'create schema fine_but_blocked;',
+      '0901_rollback_inside.sql': 'create schema x_rb; rollback;',
     });
     assert.equal(
       await codeOf(applyScripts(target.connection.pool, 'migration', dir)),
@@ -221,11 +232,11 @@ describe('migrations against real PostgreSQL', () => {
 
   it('rejects the scanner bypasses found in review before anything runs (CR comment, begin-atomic lookalike)', async () => {
     const probes: Record<string, string> = {
-      '0002_cr_comment.sql':
+      '0900_cr_comment.sql':
         'create schema atomicity_probe; -- comment\rCOMMIT;\rselect * from no_such_review_table;',
-      '0002_crlf_comment.sql':
+      '0900_crlf_comment.sql':
         'create schema atomicity_probe; -- comment\r\nCOMMIT;\r\nselect * from no_such_review_table;',
-      '0002_atomic_lookalike.sql': [
+      '0900_atomic_lookalike.sql': [
         'create schema atomicity_probe;',
         'create domain atomic as integer;',
         'create table atomicity_probe.t (begin atomic);',
@@ -236,8 +247,8 @@ describe('migrations against real PostgreSQL', () => {
     for (const [name, body] of Object.entries(probes)) {
       // a valid pending script ahead of it must not be applied either
       const dir = scratchMigrations({
-        '0002_valid_first.sql': 'create schema valid_first;',
-        ...{ [name.replace('0002', '0003')]: body },
+        '0900_valid_first.sql': 'create schema valid_first;',
+        ...{ [name.replace('0900', '0901')]: body },
       });
       assert.equal(
         await codeOf(applyScripts(target.connection.pool, 'migration', dir)),
@@ -250,7 +261,7 @@ describe('migrations against real PostgreSQL', () => {
       assert.deepEqual(leaked, [], name);
       assert.equal(
         (await q(`select count(*)::int as n from system.schema_migrations`))[0].n,
-        1,
+        COMMITTED,
         name,
       );
     }
@@ -259,15 +270,19 @@ describe('migrations against real PostgreSQL', () => {
   it('serialises concurrent runners: each script is applied exactly once', async () => {
     const fresh = await createIsolatedDatabase();
     try {
-      const dir = scratchMigrations({ '0002_probe_b.sql': 'create schema probe_b;' });
+      const dir = scratchMigrations({ '0900_probe_b.sql': 'create schema probe_b;' });
       const results = await Promise.all(
         Array.from({ length: 6 }, () => applyScripts(fresh.connection.pool, 'migration', dir)),
       );
-      assert.equal(results.flat().length, 2, 'two scripts applied in total across all runners');
+      assert.equal(
+        results.flat().length,
+        COMMITTED + 1,
+        'every script is applied exactly once in total across all runners',
+      );
       const { rows } = await fresh.connection.pool.query(
         'select count(*)::int as n from system.schema_migrations',
       );
-      assert.equal(rows[0].n, 2);
+      assert.equal(rows[0].n, COMMITTED + 1);
     } finally {
       await fresh.drop();
     }
