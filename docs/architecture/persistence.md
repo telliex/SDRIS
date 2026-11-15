@@ -35,7 +35,7 @@ Reasoning:
 Open point for the Owner: if schema-as-code diffing (`drizzle-kit generate`) is wanted later, that is a separate
 decision; the SQL-first migrations here do not preclude it.
 
-### Dependency licences and versions
+### Dependency versions
 
 `drizzle-orm@^0.45.4`, `pg@^8.23.1` (runtime); `@types/pg` (dev). Versions are pinned by `pnpm-lock.yaml`.
 Drizzle is pre-1.0, so minor upgrades may carry breaking changes; upgrade deliberately.
