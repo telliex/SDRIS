@@ -148,7 +148,17 @@ importers:
         version: 5.9.3
 
   modules/investigation:
+    dependencies:
+      '@sdris/shared-kernel':
+        specifier: workspace:^
+        version: link:../../packages/shared-kernel
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.5
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.15
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
