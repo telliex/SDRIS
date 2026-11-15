@@ -35,3 +35,14 @@ export {
   revisionEquals,
   revisionRefEquals,
 } from './revision-ref';
+
+export type { Timestamp } from './timestamp';
+export { isTimestamp, parseTimestamp, timestampFromDate, timestampToDate } from './timestamp';
+
+export type {
+  AuditMetadata,
+  DomainEventEnvelope,
+  EventMetadata,
+  ExecutionContext,
+} from './event-metadata';
+export { parseAuditMetadata, parseEventMetadata } from './event-metadata';
