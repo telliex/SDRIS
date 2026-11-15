@@ -30,6 +30,7 @@ const cases = [
   ['valid', '14-', 'modules/evidence', 'public'],
   ['valid', '15-', 'modules/evidence/src/public/index.js', 'public'],
   ['invalid', '21-', 'modules/evidence/src/domain/model.js', 'private'],
+  ['invalid', '22-', 'modules/evidence/src/domain/model.jsx', 'private'],
   ['valid', '01-', '@sdris/investigation', 'public'],
 ];
 

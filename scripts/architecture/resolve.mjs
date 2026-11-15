@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-const EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.d.ts', '.js', '.jsx', '.mjs', '.cjs'];
+const DIRECTORY_INDEX_EXTENSIONS = ['.ts', '.tsx', '.d.ts', '.js', '.jsx'];
 
 const stat = (p) => {
   try {
@@ -14,29 +14,34 @@ const stat = (p) => {
 const isFile = (p) => stat(p)?.isFile() === true;
 const isDirectory = (p) => stat(p)?.isDirectory() === true;
 
-const TS_EXTENSION = /\.(?:d\.ts|[cm]?tsx?)$/;
-/** TypeScript maps a JavaScript extension in a specifier to these source extensions, in order. */
+/**
+ * Extension candidates in the order TypeScript's node resolution tries them (verified against
+ * `ts.resolveModuleName` by tests/architecture/extension-order.test.mjs, not assumed). Each entry
+ * replaces the specifier's own extension; a specifier with no listed extension has these appended.
+ */
+const TS_ORDER = ['.ts', '.tsx', '.d.ts', '.js', '.jsx'];
+const TSX_ORDER = ['.tsx', '.ts', '.d.ts', '.jsx', '.js'];
+const MODULE_ORDER = { m: ['.mts', '.d.mts', '.mjs'], c: ['.cts', '.d.cts', '.cjs'] };
 const SUBSTITUTIONS = {
-  '.js': ['.ts', '.tsx', '.d.ts'],
-  '.jsx': ['.tsx', '.d.ts'],
-  '.mjs': ['.mts', '.d.mts'],
-  '.cjs': ['.cts', '.d.cts'],
+  '.ts': TS_ORDER,
+  '.js': TS_ORDER,
+  '.tsx': TSX_ORDER,
+  '.jsx': TSX_ORDER,
+  '.mts': MODULE_ORDER.m,
+  '.mjs': MODULE_ORDER.m,
+  '.cts': MODULE_ORDER.c,
+  '.cjs': MODULE_ORDER.c,
 };
 
-/**
- * Files a specifier could name as a *file*, in TypeScript's order: a `.js`-style specifier tries its
- * TypeScript sources first and the JavaScript file last; a TypeScript extension names itself;
- * anything else has extensions appended (TypeScript before JavaScript).
- */
+/** Files a specifier could name as a *file*, in TypeScript's order. */
 function fileCandidates(abs) {
   const ext = path.extname(abs);
-  const substitutes = SUBSTITUTIONS[ext];
-  if (substitutes) {
+  const order = SUBSTITUTIONS[ext];
+  if (order) {
     const base = abs.slice(0, -ext.length);
-    return [...substitutes.map((e) => base + e), abs];
+    return order.map((e) => base + e);
   }
-  if (TS_EXTENSION.test(abs)) return [abs];
-  return EXTENSIONS.map((e) => abs + e);
+  return TS_ORDER.map((e) => abs + e);
 }
 
 /**
@@ -63,7 +68,7 @@ export function resolveFile(abs, depth = 0) {
       // An unreadable manifest is treated as absent, as TypeScript does.
     }
   }
-  return EXTENSIONS.map((ext) => path.join(abs, 'index' + ext)).find(isFile);
+  return DIRECTORY_INDEX_EXTENSIONS.map((ext) => path.join(abs, 'index' + ext)).find(isFile);
 }
 
 const tsconfigCache = new Map();
