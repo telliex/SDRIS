@@ -10,10 +10,21 @@
     "dev": "pnpm --parallel --filter @sdris/web --filter @sdris/api --filter @sdris/worker dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "node --test tests/bootstrap/*.test.mjs",
-    "check:structure": "node scripts/verify-workspace.mjs"
+    "test": "node --test tests/bootstrap/*.test.mjs && pnpm -r --if-present test",
+    "check:structure": "node scripts/verify-workspace.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
-    "typescript": "^5.7.3"
+    "@eslint/js": "^9",
+    "@next/eslint-plugin-next": "^15",
+    "eslint": "^9",
+    "eslint-config-prettier": "^9",
+    "globals": "^15",
+    "prettier": "^3",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8"
   }
 }
