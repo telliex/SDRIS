@@ -14,6 +14,7 @@ export const base = tseslint.config(
       '**/next-env.d.ts',
       // Deliberately invalid sources used by architecture tests (e.g. require() on purpose).
       'tests/architecture/fixtures/**',
+      'tests/architecture/type-surface/**',
     ],
   },
   js.configs.recommended,

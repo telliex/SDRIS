@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkArchitecture } from './architecture/check.mjs';
+import { checkModuleSurfaces } from './architecture/surfaces.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -21,6 +22,10 @@ try {
     option('--matrix') ?? path.join(here, 'architecture', 'dependency-matrix.json'),
   );
   const { violations, notes, stats } = checkArchitecture({ root, matrixPath });
+  // Type-level leaks (return types, parameters, generated declarations) that import rules cannot see.
+  const surfaces = checkModuleSurfaces({ root });
+  violations.push(...surfaces.violations);
+  stats.surfacesChecked = surfaces.checked;
 
   if (args.includes('--json')) {
     console.log(JSON.stringify({ violations, notes, stats }, null, 2));
@@ -31,7 +36,7 @@ try {
       if (v.hint) console.error(`      hint: ${v.hint}`);
     }
     for (const n of notes) console.error(`NOTE  ${n.file}:${n.line}  ${n.message}`);
-    const summary = `${stats.packages} packages, ${stats.files} files scanned`;
+    const summary = `${stats.packages} packages, ${stats.files} files scanned, ${stats.surfacesChecked} public type surfaces`;
     if (violations.length === 0)
       console.log(`PASS: architecture boundaries hold (${summary}; ${notes.length} notes)`);
     else console.error(`FAIL: ${violations.length} architecture violation(s) (${summary})`);
