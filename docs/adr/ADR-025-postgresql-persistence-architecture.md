@@ -6,7 +6,7 @@
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
 - **Related:** ADR-024, AGENTS.md, CLAUDE.md
 - **Implementation Reference:** PR #5 — S0-04 PostgreSQL & Migration Baseline
-- **Proposed amendments:** A1 — S0-05 persistence dependency policy (see below). **PROPOSED, pending Engineering Owner approval.**
+- **Proposed amendments:** A1 — S0-05 persistence dependency policy; A2 — dedicated composition entry point (revises A1 Rule 3). Both are below. **PROPOSED, pending Engineering Owner approval.**
 
 ## 1. Context
 
@@ -479,15 +479,15 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
 
 ## 17. Follow-up Actions
 
-| Task                   | Required action                                                                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| S0-04                  | Obtain ADR approval and reconcile the PR documentation                                                                                                 |
-| S0-05                  | Validate repository adapter ownership and UnitOfWork contract                                                                                          |
-| S0-05                  | Refine architecture rules for context-owned persistence adapters (proposed in Amendment A1; implemented in the checker on a branch, awaiting approval) |
-| Future governance task | Decide Audit/Outbox/Inbox/Jobs ownership                                                                                                               |
-| Future retrieval task  | Decide Retrieval persistence and schema                                                                                                                |
-| S0-10                  | Add PostgreSQL integration tests to GitHub CI                                                                                                          |
-| Security review        | Triage existing dependency vulnerabilities                                                                                                             |
+| Task                   | Required action                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S0-04                  | Obtain ADR approval and reconcile the PR documentation                                                                                                       |
+| S0-05                  | Validate repository adapter ownership and UnitOfWork contract                                                                                                |
+| S0-05                  | Refine architecture rules for context-owned persistence adapters (proposed in Amendments A1 and A2; implemented in the checker and PR #6, awaiting approval) |
+| Future governance task | Decide Audit/Outbox/Inbox/Jobs ownership                                                                                                                     |
+| Future retrieval task  | Decide Retrieval persistence and schema                                                                                                                      |
+| S0-10                  | Add PostgreSQL integration tests to GitHub CI                                                                                                                |
+| Security review        | Triage existing dependency vulnerabilities                                                                                                                   |
 
 ## Proposed Amendment A1 — Persistence Dependency Policy for S0-05
 
@@ -519,7 +519,7 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
    alias, a barrel file or a re-export. Because an intermediary outside `src/infrastructure/**` cannot import it at all,
    a barrel cannot launder it, and indirect imports need no separate tracking. A repository adapter implements a port
    defined in `src/application`; the port never imports the adapter. Tests of an adapter live inside
-   `src/infrastructure/**`.
+   `src/infrastructure/**`. **Revised by Amendment A2:** `src/composition/**` may also import it (and no other path).
 4. **Global Infrastructure does not import business modules by default.** `infrastructure/*` may depend only on the
    Shared Kernel, contracts and config. It may not import a business module's public entrypoint or internals. There is
    no exception mechanism in this amendment: any exception requires a further amendment.
@@ -586,6 +586,126 @@ the manifest check each turns fixtures red.
   repository.
 - Whether Global Infrastructure may ever import a business module's public contract (Rule 4 has no exception).
 - Audit, Outbox, Inbox and Job table ownership; the Retrieval schema; role-per-context and row-level security.
+
+## Proposed Amendment A2 — Dedicated Composition Entry Point
+
+- **Status:** PROPOSED — Pending Engineering Owner Approval. It does not change the status of ADR-025 or of
+  Amendment A1, and nothing in it is in force until the Engineering Owner approves it in writing.
+- **Revises Amendment A1, Rule 3.** A1 Rule 3 said that only `src/infrastructure/**` may import a module's own
+  `src/infrastructure/**`. A2 widens that to `src/infrastructure/**` **and** `src/composition/**`. Every other path
+  (`src/domain`, `src/application`, `src/public`, `src/helpers`, `src/shared`, `test/`, and so on) remains forbidden, so
+  the full-path restriction exercised by fixtures 29f and 29g is unchanged. All other A1 rules stand.
+- **Resolves:** the composition gap found while applying A1: the application composition root (`apps/api`) needs a
+  legitimate way to obtain a working module, but the public entrypoint may not import infrastructure.
+- **Implementation reference:** PR #6 (checker, type-surface verification, Investigation implementation).
+
+### A2.1 Design
+
+```text
+apps/api/src/composition/**                 (the only approved composition root, initially)
+   | import { createInvestigationModule } from '@sdris/investigation/composition'
+   | import { createPersistenceHandle }   from '@sdris/database'          (apps may use infrastructure)
+   v
+@sdris/investigation/composition  ->  src/composition/index.ts
+   |  import type { PersistenceHandle } from '@sdris/database'            (type-only, opaque, approved)
+   |  imports src/application (service, ports) and src/infrastructure (adapter), same context only
+   v
+src/infrastructure/**  ->  drizzle-orm, @sdris/database                  (allowlisted, A1)
+src/application/** (ports)  <-- implemented by -->  src/infrastructure/**
+src/public/**  : contracts only; never imports composition or infrastructure
+```
+
+### A2.2 Rules
+
+1. **A new module zone `src/composition/**`.** It is separate from public, domain, application and infrastructure.
+2. **Same-context infrastructure may be imported only from `src/infrastructure/**` and `src/composition/**`.**
+   (Revises A1 Rule 3.)
+3. **Only `src/composition/**` may import the composition zone.** Domain, application, public, infrastructure and any
+   other path may not, directly, by relative path, alias, barrel or re-export.
+4. **Exactly one extra package entrypoint:** `@sdris/<context>/composition`, mapped to `src/composition/index.ts`. The
+   root entrypoint `.` and `main` must stay under `src/public/**`. No other subpath may point outside `src/public/**`.
+5. **Only explicitly listed composition roots may import that subpath.** The allowlist key `compositionRoots` in
+   `dependency-matrix.json` lists, per module, the application packages and the source paths allowed. Package and path
+   must both match. Empty means nobody. Initially only `apps/api/src/composition/**` is listed, for Investigation.
+   `apps/worker`, `apps/web`, other contexts, contracts, config, kernel and Global Infrastructure are not authorised.
+6. **The composition zone may import the database contract only as a type.** `import type` from an allowlisted Global
+   Infrastructure package is permitted; a runtime import is not. The composition zone may never import Drizzle or a
+   database driver, even when the context is allowlisted for them in `src/infrastructure/**`.
+7. **The composition entrypoint exposes factories and contracts, never adapters.** It may not re-export
+   `src/infrastructure/**`, an ORM or driver, or a Global Infrastructure package, whether by `export ... from`,
+   `export *`, a barrel chain, an alias, or a local `export { X }` / `export default X` of an imported binding.
+8. **`src/public/**` stays independent.** It may not import composition or infrastructure, and its type surface may name
+   no persistence type, not even the approved opaque handle.
+9. **Cross-context restrictions are unchanged.** Composition gets no additional cross-context rights.
+
+### A2.3 Factory contract
+
+- An exported composition factory declares an **explicit return type** that is a public contract
+  (`createInvestigationModule(persistence: PersistenceHandle, options?: InvestigationModuleOptions): InvestigationModule`).
+  An inferred return type is rejected.
+- A factory's signature, and everything reachable from it (members, parameters, return and type arguments, base types,
+  constraints, index signatures), may not mention a concrete adapter class, any `src/infrastructure/**` type, a Drizzle or
+  driver type, or any `@sdris/database` symbol other than the approved opaque contracts (currently only
+  `PersistenceHandle`).
+- **`PersistenceHandle` is opaque.** It has no members. The owning infrastructure adapter obtains the unit of work and
+  executor through `unitOfWorkOf` / `executorOf` inside `@sdris/database`. If the handle ever exposed a Drizzle database
+  or an executor, the type-surface check fails.
+
+### A2.4 Enforcement
+
+| Rule ID                                                     | Enforces                                                                          |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `boundary/composition-inversion`                            | Rule 3                                                                            |
+| `boundary/infrastructure-inversion`                         | Rule 2 (A1 Rule 3 as revised)                                                     |
+| `dependency/composition-access`                             | Rule 5, including alias and package-specifier spellings                           |
+| `dependency/direction`                                      | Rule 6 for runtime imports of the database package; roots and cross-context edges |
+| `dependency/forbidden-external`                             | Rule 6 for Drizzle and drivers in the composition zone                            |
+| `composition/adapter-exposure`                              | Rule 7, including local re-exports of imported bindings                           |
+| `package/entrypoint-location`                               | Rule 4                                                                            |
+| `composition/explicit-return-type`                          | A2.3 explicit return types                                                        |
+| `composition/type-surface-leak`, `public/type-surface-leak` | A2.3 and Rule 8, found by walking the compiler's type graph                       |
+| `composition/declaration-leak`, `public/declaration-leak`   | The same, found in the really generated `.d.ts`                                   |
+
+Lexical import rules cannot see a leak that happens through types alone, so the type surface is verified with the
+TypeScript compiler (`scripts/architecture/type-surface.mjs`, run by `pnpm check:architecture`). The two checks are
+complementary: a non-opaque `PersistenceHandle` is found only by the type-graph walk, because the declaration merely
+names the approved handle.
+
+### A2.5 Evidence and limitations
+
+- Fixtures V1–V5, I2–I12 and C1 cover the allowed and forbidden paths; 29f and 29g are preserved. Mutation checks show that
+  each of these rules turns fixtures red when removed: zone import permissions, approved-root lookup, type-only database
+  dependency, adapter exposure (including local re-exports), entrypoint location, and type-surface walking.
+- One mutation is an equivalent mutant, not a gap: the composition-root lookup checks both the package and the path, and
+  policy validation requires every path to lie inside a listed app, so the path check alone already implies the package.
+  The package check is kept as defence in depth.
+- The type-surface check reads the declared types of exports; it cannot prove that a function body never returns a
+  private object through a correctly typed interface. Review remains necessary for behaviour.
+- Test files for an adapter must live under `src/infrastructure/**`.
+- The composition subpath is resolved by `tsx` and by TypeScript through `exports` and `typesVersions`. The API has no
+  workspace build step yet, so a compiled `dist` that must run outside `tsx` is not addressed by this amendment.
+
+### A2.6 Decision 5 evaluation (UnitOfWork), reported for the Owner
+
+The S0-05 requirement was to validate the transaction abstraction with a real repository. Result:
+
+- The existing `UnitOfWork` and `executorFor` contracts were kept unchanged: callback-scoped, commit on resolve,
+  rollback on reject, context invalidated on exit. They sufficed for atomic version-bump-plus-observation writes,
+  rollback on domain and database errors, and optimistic concurrency.
+- The application layer needs a transaction port that mentions no database type. Instead of moving `UnitOfWork` anywhere
+  shared, the Investigation context owns a `TransactionScope` port in `src/application/ports` and an adapter that maps it
+  onto the database unit of work. This keeps Decision 5's condition (nothing in Shared Kernel) and means each context
+  currently owns a small copy of the port.
+- **Recommendation, not a decision:** keep `UnitOfWork` infrastructure-owned and the application port context-owned until a
+  second context needs the same shape; then decide whether a shared persistence contract package is justified.
+
+### A2.7 Not decided here
+
+- Whether `apps/worker` becomes a composition root (it is not authorised).
+- Whether the runtime composition needs a package build step for non-`tsx` execution.
+- The final home of a shared transaction contract (A2.6).
+- The Investigation aggregate itself: the S0-05 specification is not committed; the minimal aggregate in this change has no
+  status or lifecycle and is only a vehicle for verifying the persistence path.
 
 ## 18. Acceptance and Change Control
 
