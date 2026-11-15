@@ -12,6 +12,8 @@ export const base = tseslint.config(
       '**/.next/**',
       '**/coverage/**',
       '**/next-env.d.ts',
+      // Deliberately invalid sources used by architecture tests (e.g. require() on purpose).
+      'tests/architecture/fixtures/**',
     ],
   },
   js.configs.recommended,
