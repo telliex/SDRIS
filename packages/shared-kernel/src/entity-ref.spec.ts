@@ -67,7 +67,7 @@ test('parseEntityRef rejects non-objects, wrong types, and malformed ids', () =>
     [{ entityType: 'UUT', id: UUID_A }, 'InvestigationCase'],
   ];
   for (const [input, expected] of cases) {
-    const result = parseEntityRef(input, expected);
+    const result = expected === undefined ? parseEntityRef(input) : parseEntityRef(input, expected);
     assert.equal(result.ok, false, JSON.stringify(input));
   }
 });
@@ -86,4 +86,30 @@ test('entityRefEquals compares type and id', () => {
   assert.equal(entityRefEquals(a.value, b.value), true);
   assert.equal(entityRefEquals(a.value, c.value), false);
   assert.notEqual(UUID_A, UUID_B);
+});
+
+test('parseEntityRef without expectedType returns a general EntityRef', () => {
+  const result = parseEntityRef({ entityType: 'InvestigationCase', id: UUID_B });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    const ref: EntityRef = result.value;
+    assert.equal(ref.entityType, 'InvestigationCase');
+    // @ts-expect-error the type is only `string`, so it cannot be assumed to be 'UUT'
+    const kind: 'UUT' = ref.entityType;
+    void kind;
+  }
+});
+
+test('parseEntityRef cannot claim a type without a runtime check', () => {
+  // @ts-expect-error a type argument alone is erased at runtime; pass expectedType instead
+  parseEntityRef<'UUT'>({ entityType: 'InvestigationCase', id: UUID_B });
+});
+
+test('parseEntityRef rejects a runtime entityType that contradicts expectedType', () => {
+  const result = parseEntityRef({ entityType: 'InvestigationCase', id: UUID_B }, 'UUT');
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'shared_kernel.invalid_entity_ref');
+    assert.equal(result.error.details?.field, 'entityType');
+  }
 });

@@ -48,14 +48,28 @@ export function createEntityRef<TType extends string>(
 }
 
 /**
- * Validates untrusted input (e.g. parsed JSON) as an EntityRef. When `expectedType` is given the
- * reference must be of exactly that type.
+ * Validates untrusted input (e.g. parsed JSON) as an EntityRef.
+ *
+ * Without `expectedType` the result is a general `EntityRef`. With it, the input's `entityType`
+ * must equal `expectedType` at runtime and the result is narrowed to `EntityRef<TType>`. The
+ * narrowed type can only be requested by passing the value: `parseEntityRef<'UUT'>(input)` does
+ * not compile, because a compile-time-only type argument cannot be checked at runtime.
  */
-export function parseEntityRef<TType extends string = string>(
+export function parseEntityRef(
   input: unknown,
-  expectedType?: TType,
+  expectedType?: undefined,
   field?: string,
-): Result<EntityRef<TType>, KernelError> {
+): Result<EntityRef, KernelError>;
+export function parseEntityRef<const TType extends string>(
+  input: unknown,
+  expectedType: TType,
+  field?: string,
+): Result<EntityRef<TType>, KernelError>;
+export function parseEntityRef(
+  input: unknown,
+  expectedType?: string,
+  field?: string,
+): Result<EntityRef, KernelError> {
   if (!isRecord(input)) {
     return err(kernelError('shared_kernel.invalid_entity_ref', 'must be an object', field));
   }
@@ -69,7 +83,7 @@ export function parseEntityRef<TType extends string = string>(
       ),
     );
   }
-  return createEntityRef(entityType as TType, id as EntityId<TType>, field);
+  return createEntityRef(entityType as string, id as EntityId, field);
 }
 
 export function entityRefEquals(a: EntityRef, b: EntityRef): boolean {

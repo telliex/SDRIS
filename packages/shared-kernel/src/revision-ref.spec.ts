@@ -122,3 +122,30 @@ test('equality distinguishes scheme and value', () => {
   assert.equal(revisionRefEquals(a.value, a.value), true);
   assert.equal(revisionRefEquals(a.value, b.value), false);
 });
+
+const mismatched = {
+  target: { entityType: 'InvestigationCase', id: UUID_A },
+  revision: { scheme: 'sequence', value: 1 },
+};
+
+test('parseRevisionRef without expectedType returns a general RevisionRef', () => {
+  const result = parseRevisionRef(mismatched);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value.target.entityType, 'InvestigationCase');
+    // @ts-expect-error the type is only `string`, so it cannot be assumed to be 'UUT'
+    const kind: 'UUT' = result.value.target.entityType;
+    void kind;
+  }
+});
+
+test('parseRevisionRef cannot claim a type without a runtime check', () => {
+  // @ts-expect-error a type argument alone is erased at runtime; pass expectedType instead
+  parseRevisionRef<'UUT'>(mismatched);
+});
+
+test('parseRevisionRef rejects a target whose entityType contradicts expectedType', () => {
+  const result = parseRevisionRef(mismatched, 'UUT', 'ref');
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.details?.field, 'ref.target.entityType');
+});

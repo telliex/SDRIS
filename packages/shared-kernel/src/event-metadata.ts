@@ -151,11 +151,23 @@ function parseCommon(input: Record<string, unknown>): Result<CommonMetadata, Ker
   });
 }
 
-/** Validates untrusted input as EventMetadata and returns a frozen copy. */
-export function parseEventMetadata<TType extends string = string>(
+/**
+ * Validates untrusted input as EventMetadata and returns a frozen copy. The event type is only
+ * narrowed when `expectedType` is passed (and then checked at runtime); with no argument the
+ * result is `EventMetadata<string>`. `parseEventMetadata<'a.b'>(input)` does not compile.
+ */
+export function parseEventMetadata(
   input: unknown,
-  expectedType?: TType,
-): Result<EventMetadata<TType>, KernelError> {
+  expectedType?: undefined,
+): Result<EventMetadata, KernelError>;
+export function parseEventMetadata<const TType extends string>(
+  input: unknown,
+  expectedType: TType,
+): Result<EventMetadata<TType>, KernelError>;
+export function parseEventMetadata(
+  input: unknown,
+  expectedType?: string,
+): Result<EventMetadata, KernelError> {
   if (!isRecord(input)) return bad('must be an object', 'metadata');
   const eventId = parseEntityId<'DomainEvent'>(input.eventId, 'eventId');
   if (isErr(eventId)) return eventId;
@@ -181,7 +193,7 @@ export function parseEventMetadata<TType extends string = string>(
   return ok(
     Object.freeze({
       eventId: eventId.value,
-      eventType: eventType as TType,
+      eventType,
       aggregate: aggregate.value,
       ...(actor !== undefined ? { actor } : {}),
       ...common.value,

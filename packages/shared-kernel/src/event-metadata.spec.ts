@@ -184,3 +184,30 @@ test('audit metadata: rejects malformed identifiers and timestamps', () => {
     assert.equal(parseAuditMetadata({ ...validAudit(), [field]: value }).ok, false, field);
   }
 });
+
+test('parseEventMetadata without expectedType returns a general EventMetadata', () => {
+  const result = parseEventMetadata(validEvent());
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    // @ts-expect-error the type is only `string`, so it cannot be assumed to be a specific event
+    const type: 'investigation.case_opened' = result.value.eventType;
+    void type;
+  }
+});
+
+test('parseEventMetadata cannot claim an event type without a runtime check', () => {
+  // @ts-expect-error a type argument alone is erased at runtime; pass expectedType instead
+  parseEventMetadata<'investigation.case_opened'>({
+    ...validEvent(),
+    eventType: 'investigation.case_closed',
+  });
+});
+
+test('parseEventMetadata rejects an eventType that contradicts expectedType', () => {
+  const result = parseEventMetadata(
+    { ...validEvent(), eventType: 'investigation.case_closed' },
+    'investigation.case_opened',
+  );
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.details?.field, 'eventType');
+});
