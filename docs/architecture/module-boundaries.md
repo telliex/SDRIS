@@ -140,6 +140,23 @@ published contract cannot serve, and the owning context; the matrix change lands
 - `infrastructure/*` has no TypeScript yet and is not scanned.
 - Database-level ownership ("never write another module's tables") is out of scope for import checks.
 
+## Decision evidence and pending Owner decisions
+
+Everything in this document is **PROPOSED**. Nothing here is approved by the Engineering Owner. This
+table records what evidence exists in the repository, and what is missing.
+
+| Item                               | Evidence found in the repository                                                                                                                                             | Status                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Formal S0-03 acceptance criteria   | Task name only: [CLAUDE.md](../../CLAUDE.md) task table ("S0-03 Architecture Boundary Rules"). The criteria came from the task prompt, which is not committed.               | **Pending Owner Decision** |
+| Architecture Baseline              | None. `docs/architecture/` was empty before this document. [AGENTS.md](../../AGENTS.md) says ADR-001 to ADR-024 exist in planning history and must not be assumed committed. | **Pending Owner Decision** |
+| ADRs                               | Only [ADR-024](../adr/ADR-024-sprint-0-execution.md), which scopes Sprint 0 but sets no dependency rules.                                                                    | **Pending Owner Decision** |
+| Module-to-module dependency matrix | None. `scripts/architecture/dependency-matrix.json` is empty and marked PROPOSED; default is deny.                                                                           | **Pending Owner Decision** |
+| Shared-package layer policy        | Not defined. The policy table above is the implementer's proposal based on [AGENTS.md section 5](../../AGENTS.md).                                                           | **Pending Owner Decision** |
+| Cross-package relative imports     | Not defined. Rejected by this checker as a conservative choice.                                                                                                              | **Pending Owner Decision** |
+| CI deferred to S0-10               | [CLAUDE.md](../../CLAUDE.md) task table lists "S0-10 CI Gates"; no `.github/workflows` exist. The deferral rule itself comes from the uncommitted task prompt.               | **Pending Owner Decision** |
+
+Do not change a status to APPROVED without an Owner-approved ADR or an explicit recorded approval.
+
 ## CI
 
 No GitHub Actions workflow exists; CI is reserved for S0-10. `pnpm check:architecture` is ready to be a
