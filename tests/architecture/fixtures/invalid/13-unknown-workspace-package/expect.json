@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/unknown-workspace-package",
+      "file": "apps/web/src/typo.ts"
+    }
+  ]
+}

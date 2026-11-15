@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/private-import",
+      "file": "apps/worker/src/lazy.ts"
+    },
+    {
+      "rule": "boundary/private-import",
+      "file": "apps/worker/src/lazy.ts"
+    }
+  ]
+}

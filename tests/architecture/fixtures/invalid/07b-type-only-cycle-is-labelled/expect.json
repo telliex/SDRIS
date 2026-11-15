@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "cycle/cross-package",
+      "file": "modules/evidence/src/public/index.ts"
+    }
+  ],
+  "messageIncludes": "(type-only)"
+}

@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "packages/shared-kernel/src/leak.ts"
+    }
+  ]
+}

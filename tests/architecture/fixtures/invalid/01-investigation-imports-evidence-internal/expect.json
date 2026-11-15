@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/private-import",
+      "file": "modules/investigation/src/application/open-case.ts"
+    }
+  ]
+}
