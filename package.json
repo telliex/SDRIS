@@ -23,7 +23,8 @@
     "db:status": "pnpm --filter @sdris/database run cli status",
     "db:seed": "pnpm --filter @sdris/database run cli seed",
     "db:reset": "pnpm --filter @sdris/database run cli reset",
-    "db:test": "pnpm --filter @sdris/database run test:integration && pnpm --filter @sdris/api run test:integration"
+    "db:test": "pnpm --filter @sdris/database run test:integration && pnpm --filter @sdris/api run test:integration && pnpm test:runtime",
+    "test:runtime": "node --test tests/runtime/*.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9",
