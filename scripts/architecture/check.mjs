@@ -533,6 +533,19 @@ function classify({ pkg, file, imp, root }, packages, byName) {
       };
     }
     const subpath = rest.length === 0 ? '.' : `./${rest.join('/')}`;
+    if (owner === pkg) {
+      // A module importing itself by package name must be judged like a relative or alias import: resolve
+      // the file so the zone rules (infrastructure and composition inversion) apply. A published subpath
+      // resolves to its entry file; anything else is read as a path inside the package, as a self-reference
+      // would be.
+      const published = owner.entries.get(subpath);
+      const abs = published ? [...published][0] : path.join(owner.dir, ...rest);
+      return {
+        owner,
+        resolvedFile: resolveFile(abs) ?? abs,
+        compositionEntry: subpath === COMPOSITION_SUBPATH,
+      };
+    }
     if (owner !== pkg && !owner.entries.has(subpath)) {
       return {
         owner,
