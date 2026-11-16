@@ -43,6 +43,15 @@ and every constraint that will deliberately **not** exist is listed next to it.
 - **Not done:** no "exactly one INITIAL_FAILURE" rule and no automatic closing of a case. Linking a RETEST records the
   relationship only; it establishes no repair effectiveness and no RCA conclusion.
 
+## 4a. Duplicate handling and unrelated errors (revised approval, Q5)
+
+Duplicate handling is concurrency-safe: a duplicate is detected from a fresh read in the same transaction, and a concurrent
+writer is stopped by the atomic version check, so the caller re-reads and finds an idempotent duplicate. The adapter
+translates exactly one database failure, a violation of the two same-UUT foreign keys (`SQLSTATE 23503` **and** the
+constraint name), to `uut_mismatch`. Everything else (a unique violation from a racing raw writer, a check, a trigger, a
+lost connection) is thrown and rolls the transaction back; nothing is suppressed. Inserts of UUT, attempt and case name
+their conflict target (`id`) instead of ignoring every conflict.
+
 ## 5. Same-UUT protection
 
 Enforced twice, by the same mechanism that already protects observations in `0002`:

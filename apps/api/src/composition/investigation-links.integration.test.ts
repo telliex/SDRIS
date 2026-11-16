@@ -710,6 +710,60 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.equal(await caseVersion(c.id), 2);
     });
 
+    it('does not suppress an unrelated database error: a unique violation from a racing raw insert is thrown and rolled back', async () => {
+      const { c, a } = await scenario();
+      const other = await target.connection.pool.connect();
+      try {
+        // Another session holds an uncommitted link with the same key but does not touch the case version,
+        // so the service's version check passes and its insert must wait for, then collide with, that row.
+        await other.query('begin');
+        await other.query(
+          `insert into investigation.case_test_attempt_link (case_id, attempt_id, uut_id, role, linked_at) values ($1, $2, $3, 'RETEST', now())`,
+          [c.id, a.id, c.uut.id],
+        );
+        const writer = service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+        const outcome = writer.then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
+        for (let waited = 0; ; waited += 10) {
+          const blocked = await sql(
+            "select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+          );
+          if (blocked[0].n >= 1) break;
+          assert.ok(waited < 5000, 'the writer never reached the unique key lock');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        await other.query('commit');
+        const settled = await outcome;
+        assert.ok('error' in settled, 'the unique violation must surface, not become a result');
+        assert.equal(pgErrorCode(settled.error), RAW_UNIQUE);
+      } finally {
+        other.release();
+      }
+      assert.equal(
+        await caseVersion(c.id),
+        1,
+        'the version bump was rolled back with the failed insert',
+      );
+      assert.equal(
+        (
+          await sql(
+            'select count(*)::int as n from investigation.case_test_attempt_link where case_id = $1',
+            [c.id],
+          )
+        )[0].n,
+        1,
+      );
+      // after the raw row is committed the same request is a plain idempotent duplicate
+      const retry = await service.linkTestAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+      });
+      assert.ok(retry.ok && !retry.value.created);
+    });
+
     it('rejects a stale write at the database boundary: the version predicate is atomic', async () => {
       const { c, a } = await scenario();
       await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });

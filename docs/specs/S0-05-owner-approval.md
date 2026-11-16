@@ -7,7 +7,11 @@
 **Effective Scope:** S0-05 Domain Specification, Owner Decision Register, Persistence Policy, and Step 4 implementation  
 **PR:** #6 — `feat/s0-05-persistence-dependency-policy`
 
-This file is the committed record of the Owner's decision. The rest of the S0-05 documents are amended to match it; if
+**Revised by [S0-05-owner-approval-revised.md](S0-05-owner-approval-revised.md)**, which supersedes this record where
+the details differ (Q2 "provisionally"; Q5 concurrency-safe duplicate handling that suppresses no unrelated database
+error; Q7 observation-specific codes removed).
+
+This file is the committed record of the Owner's first decision. The rest of the S0-05 documents are amended to match it; if
 they ever disagree, this record is authoritative until the Owner says otherwise.
 
 ## 1. Approval Statement

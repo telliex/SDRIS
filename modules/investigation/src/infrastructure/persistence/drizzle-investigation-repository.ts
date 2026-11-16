@@ -31,6 +31,22 @@ import type { TransactionToken } from '../../application/ports/transaction-scope
 import { caseTestAttemptLink, investigationCase, testAttempt, uut as uutTable } from './schema';
 
 const PG_FOREIGN_KEY_VIOLATION = '23503';
+/** The two composite foreign keys that make a link's UUT equal to its case's and its attempt's UUT. */
+const SAME_UUT_CONSTRAINTS: readonly string[] = [
+  'case_test_attempt_link_case_uut_fkey',
+  'case_test_attempt_link_attempt_uut_fkey',
+];
+
+/** Name of the violated constraint, looking through wrapped driver errors (Drizzle wraps them in `cause`). */
+function pgConstraintName(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === 'object'; depth += 1) {
+    const name = (current as { constraint?: unknown }).constraint;
+    if (typeof name === 'string') return name;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
 
 /** Unwraps a Result that can only fail if stored data is corrupt, which is a bug, not a domain outcome. */
 function stored<T>(result: Result<T, { message: string }>, what: string): T {
@@ -69,7 +85,7 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
         hostname: entity.hostname ?? null,
         createdAt: new Date(entity.createdAt),
       })
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: uutTable.id })
       .returning({ id: uutTable.id });
     return inserted.length === 0
       ? err(
@@ -105,7 +121,7 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
         externalExecutionReference: entity.externalExecutionReference ?? null,
         registeredAt: new Date(entity.registeredAt),
       })
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: testAttempt.id })
       .returning({ id: testAttempt.id });
     return inserted.length === 0
       ? err(
@@ -143,7 +159,7 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
         openedAt: new Date(created.openedAt),
         version: 1,
       })
-      .onConflictDoNothing()
+      .onConflictDoNothing({ target: investigationCase.id })
       .returning({ id: investigationCase.id });
     if (inserted.length === 0) {
       return err(
@@ -263,7 +279,13 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
         );
       return undefined;
     } catch (error) {
-      if (pgErrorCode(error) === PG_FOREIGN_KEY_VIOLATION) {
+      // Only the same-UUT keys mean "mismatch". Any other failure (a unique violation from a racing writer, a
+      // check, a trigger, a lost connection) is NOT translated and not suppressed: it is thrown, which rolls the
+      // transaction back.
+      if (
+        pgErrorCode(error) === PG_FOREIGN_KEY_VIOLATION &&
+        SAME_UUT_CONSTRAINTS.includes(pgConstraintName(error) ?? '')
+      ) {
         return err(
           createError({
             code: 'investigation.uut_mismatch' as const,
