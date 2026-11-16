@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/test-only-entrypoint",
+      "file": "infrastructure/database/src/index.ts"
+    }
+  ]
+}

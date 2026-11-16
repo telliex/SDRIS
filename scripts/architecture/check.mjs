@@ -51,6 +51,8 @@ const COMPOSITION_ZONE = 'composition';
 /** The one additional package entrypoint a module may publish, and the only file it may map to. */
 const COMPOSITION_SUBPATH = './composition';
 
+const isInside = (file, dir) => file === dir || file.startsWith(dir + path.sep);
+
 const matchesPath = (pattern, file) =>
   pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file === pattern;
 
@@ -66,12 +68,18 @@ const isPersistenceExternal = (specifier) => PERSISTENCE_EXTERNALS.some((re) => 
  */
 function loadPolicy(matrixPath) {
   if (!matrixPath || !existsSync(matrixPath))
-    return { moduleDependencies: {}, contextInfrastructure: {}, compositionRoots: {} };
+    return {
+      moduleDependencies: {},
+      contextInfrastructure: {},
+      compositionRoots: {},
+      testOnlyEntrypoints: {},
+    };
   const raw = JSON.parse(readFileSync(matrixPath, 'utf8'));
   return {
     moduleDependencies: raw.moduleDependencies ?? {},
     contextInfrastructure: raw.contextInfrastructure ?? {},
     compositionRoots: raw.compositionRoots ?? {},
+    testOnlyEntrypoints: raw.testOnlyEntrypoints ?? {},
   };
 }
 
@@ -136,6 +144,32 @@ function validatePolicy(policy, packages) {
         );
     }
   }
+  for (const [name, entry] of Object.entries(policy.testOnlyEntrypoints)) {
+    const owner = packages.find((p) => p.name === name);
+    if (!owner) fail(`testOnlyEntrypoints key "${name}" is not a workspace package`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      fail(`testOnlyEntrypoints["${name}"] must be an object`);
+    for (const key of Object.keys(entry)) {
+      if (key !== 'subpaths' && key !== 'approvedPaths')
+        fail(`testOnlyEntrypoints["${name}"] has unknown property "${key}"`);
+    }
+    if (!isStringArray(entry.subpaths) || entry.subpaths.length === 0)
+      fail(`testOnlyEntrypoints["${name}"].subpaths must be a non-empty string array`);
+    for (const subpath of entry.subpaths) {
+      if (subpath === '.')
+        fail(`testOnlyEntrypoints["${name}"] cannot make the root entrypoint test-only`);
+      if (!owner.entries.has(subpath))
+        fail(`testOnlyEntrypoints["${name}"] names "${subpath}", which ${name} does not export`);
+    }
+    if (entry.approvedPaths !== undefined && !isStringArray(entry.approvedPaths))
+      fail(`testOnlyEntrypoints["${name}"].approvedPaths must be a string array`);
+    for (const pattern of entry.approvedPaths ?? []) {
+      if (!/^[^*]+(\/\*\*)?$/.test(pattern))
+        fail(
+          `testOnlyEntrypoints["${name}"] approved path "${pattern}" must be a path, optionally ending in /**`,
+        );
+    }
+  }
 }
 
 /**
@@ -152,6 +186,22 @@ export function checkArchitecture({ root, matrixPath } = {}) {
   }
   const policy = loadPolicy(matrixPath);
   validatePolicy(policy, packages);
+  // A test-only entrypoint protects its whole directory, so production code cannot reach the helpers
+  // behind the entry either, whether from another package or from elsewhere in the same package.
+  const testOnlyZones = [];
+  for (const [name, entry] of Object.entries(policy.testOnlyEntrypoints)) {
+    const owner = packages.find((p) => p.name === name);
+    for (const subpath of entry.subpaths) {
+      for (const file of owner.entries.get(subpath)) {
+        testOnlyZones.push({
+          owner,
+          subpath,
+          dir: path.dirname(file),
+          approvedPaths: entry.approvedPaths ?? [],
+        });
+      }
+    }
+  }
   const matrix = policy.moduleDependencies;
   const byName = new Map(packages.map((p) => [p.name, p]));
   const violations = [];
@@ -348,6 +398,30 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           });
           if (target.owner) edges.push(edge(pkg, target.owner, file, imp, rel));
           continue;
+        }
+        if (target.resolvedFile !== undefined) {
+          const zone = testOnlyZones.find(
+            (z) => z.owner === target.owner && isInside(target.resolvedFile, z.dir),
+          );
+          if (
+            zone &&
+            !isInside(file, zone.dir) &&
+            !isTestFile(file) &&
+            !zone.approvedPaths.some((pattern) => matchesPath(pattern, rel(file)))
+          ) {
+            violate(
+              'dependency/test-only-entrypoint',
+              rel(file),
+              imp.line,
+              `${rel(file)} is not a test file or approved test infrastructure, but imports "${imp.specifier}", a test-only entrypoint of ${zone.owner.name} (${zone.subpath}).`,
+              {
+                specifier: imp.specifier,
+                from: pkg.name,
+                to: zone.owner.name,
+                hint: 'Only recognised test files (*.test.ts, *.spec.ts, __tests__/) and the approvedPaths listed in testOnlyEntrypoints may use it.',
+              },
+            );
+          }
         }
         if (target.compositionEntry && target.owner !== pkg) {
           const roots = policy.compositionRoots[target.owner.name];
@@ -556,7 +630,11 @@ function classify({ pkg, file, imp, root }, packages, byName) {
         },
       };
     }
-    return { owner, compositionEntry: subpath === COMPOSITION_SUBPATH };
+    return {
+      owner,
+      compositionEntry: subpath === COMPOSITION_SUBPATH,
+      resolvedFile: [...(owner.entries.get(subpath) ?? [])][0],
+    };
   }
 
   const owner = ownerOf(packages, abs);
@@ -596,6 +674,7 @@ function classify({ pkg, file, imp, root }, packages, byName) {
   }
   return {
     owner,
+    resolvedFile,
     compositionEntry: resolvedFile !== undefined && owner.compositionFiles.has(resolvedFile),
   };
 }

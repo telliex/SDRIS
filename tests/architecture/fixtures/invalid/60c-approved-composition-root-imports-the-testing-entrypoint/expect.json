@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/test-only-entrypoint",
+      "file": "apps/api/src/composition/investigation.ts"
+    }
+  ]
+}

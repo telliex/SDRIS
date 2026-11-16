@@ -160,6 +160,48 @@ for (const [label, compositionRoots] of Object.entries(MALFORMED_COMPOSITION_ROO
   });
 }
 
+test('the committed policy protects @sdris/database/testing and approves no other test infrastructure', async () => {
+  const { default: matrix } = await import('../../scripts/architecture/dependency-matrix.json', {
+    with: { type: 'json' },
+  });
+  assert.deepEqual(matrix.testOnlyEntrypoints, {
+    '@sdris/database': { subpaths: ['./testing'], approvedPaths: [] },
+  });
+});
+
+const MALFORMED_TEST_ONLY = {
+  'a key that is not a workspace package': { '@sdris/unknown': { subpaths: ['./testing'] } },
+  'an unknown property': { '@sdris/database': { subpaths: ['./testing'], x: 1 } },
+  'a missing subpath list': { '@sdris/database': {} },
+  'an empty subpath list': { '@sdris/database': { subpaths: [] } },
+  'a non-array subpath list': { '@sdris/database': { subpaths: './testing' } },
+  'a subpath the package does not export': { '@sdris/database': { subpaths: ['./nothing'] } },
+  'the root entrypoint': { '@sdris/database': { subpaths: ['.'] } },
+  'a non-array approved path list': {
+    '@sdris/database': { subpaths: ['./testing'], approvedPaths: 'x' },
+  },
+  'a non-string approved path': {
+    '@sdris/database': { subpaths: ['./testing'], approvedPaths: [1] },
+  },
+  'an approved path with a wildcard in the middle': {
+    '@sdris/database': { subpaths: ['./testing'], approvedPaths: ['apps/**/x'] },
+  },
+  'an entry that is not an object': { '@sdris/database': ['./testing'] },
+};
+for (const [label, testOnlyEntrypoints] of Object.entries(MALFORMED_TEST_ONLY)) {
+  test(`a malformed testOnlyEntrypoints policy (${label}) cannot be analysed`, () => {
+    const dir = scenarios('valid').find((s) => s.name.startsWith('30-')).dir;
+    const { root, matrixPath, cleanup } = buildScenario(dir);
+    try {
+      writeFileSync(matrixPath, JSON.stringify({ moduleDependencies: {}, testOnlyEntrypoints }));
+      assert.throws(() => checkArchitecture({ root, matrixPath }), /invalid dependency policy/);
+      assert.equal(runCli(['--root', root, '--matrix', matrixPath]).status, 2);
+    } finally {
+      cleanup();
+    }
+  });
+}
+
 test('V5: the composition wiring adds no dependency cycle and the expected package edges', () => {
   const dir = scenarios('valid').find((s) => s.name.startsWith('20-')).dir;
   const { root, matrixPath, cleanup } = buildScenario(dir);

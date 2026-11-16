@@ -1,6 +1,6 @@
 {
   "status": "PROPOSED - the approved Architecture Baseline dependency matrix is not committed yet",
-  "description": "Centralised, explicit dependency allowlist. Default is deny; each entry needs an ADR, so do not add entries to make a check pass. moduleDependencies: module-to-module edges through published public entrypoints. contextInfrastructure: per module, the Global Infrastructure workspace packages and persistence npm packages that modules/<context>/src/infrastructure/** may use. Source-path restrictions always apply on top of this list. compositionRoots: per module, the application packages and source paths allowed to import that module's `@sdris/<context>/composition` entrypoint (default: none).",
+  "description": "Centralised, explicit dependency allowlist. Default is deny; each entry needs an ADR, so do not add entries to make a check pass. moduleDependencies: module-to-module edges through published public entrypoints. contextInfrastructure: per module, the Global Infrastructure workspace packages and persistence npm packages that modules/<context>/src/infrastructure/** may use. Source-path restrictions always apply on top of this list. compositionRoots: per module, the application packages and source paths allowed to import that module's `@sdris/<context>/composition` entrypoint (default: none). testOnlyEntrypoints: per package, exported subpaths that only recognised test files (and any approvedPaths) may import; the directory behind such an entrypoint is protected too.",
   "moduleDependencies": {},
   "contextInfrastructure": {
     "@sdris/investigation": {
@@ -12,6 +12,12 @@
     "@sdris/investigation": {
       "packages": ["@sdris/api"],
       "paths": ["apps/api/src/composition/**"]
+    }
+  },
+  "testOnlyEntrypoints": {
+    "@sdris/database": {
+      "subpaths": ["./testing"],
+      "approvedPaths": []
     }
   }
 }
