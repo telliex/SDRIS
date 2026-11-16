@@ -87,8 +87,11 @@ Enforced twice, by the same mechanism that already protects observations in `000
 ## 7a. Timestamps
 
 - **Policy (Q10):** `uut.created_at`, `test_attempt.registered_at`, `investigation_case.opened_at` and
-  `case_test_attempt_link.linked_at`, all `timestamptz` and handled as UTC instants. They record when SDRIS created or
-  registered the record. They are not external execution times and not audit history (S0-06).
+  `case_test_attempt_link.linked_at`, all `timestamptz` with `default now()`. **PostgreSQL generates them**; the adapter never writes these
+  columns, no command or option of the module carries one, and the stored row is returned to the caller, so no caller can
+  choose or override a timestamp (clarification addendum D). They are exchanged as ISO-8601 UTC (`...Z`). They record when
+  SDRIS created or registered the record; they are not external execution times and not audit history (S0-06). Equal
+  timestamps are allowed: every ordering adds deterministic keys (`attempt_id`, role rank).
 
 ## 8. Schema (mirrors migration 0002)
 
@@ -97,7 +100,7 @@ create table investigation.uut (
   id            uuid primary key,
   serial_number text,                 -- optional, stored as given, not unique
   hostname      text,                 -- optional, stored as given, not unique
-  created_at    timestamptz not null
+  created_at    timestamptz not null default now()
 );
 
 create table investigation.test_attempt (
@@ -105,14 +108,14 @@ create table investigation.test_attempt (
   uut_id                       uuid not null references investigation.uut (id),
   stage                        text not null check (stage in ('IST', 'SAT')),
   external_execution_reference text,  -- optional, stored as given, not unique
-  registered_at                timestamptz not null,
+  registered_at                timestamptz not null default now(),
   constraint test_attempt_id_uut_key unique (id, uut_id)
 );
 
 create table investigation.investigation_case (
   id        uuid primary key,
   uut_id    uuid not null references investigation.uut (id),
-  opened_at timestamptz not null,
+  opened_at timestamptz not null default now(),
   version   integer not null default 1 check (version >= 1),
   constraint investigation_case_id_uut_key unique (id, uut_id)
 );
@@ -122,7 +125,7 @@ create table investigation.case_test_attempt_link (
   attempt_id uuid not null,
   uut_id     uuid not null,
   role       text not null check (role in ('INITIAL_FAILURE', 'RETEST', 'SUPPORTING', 'CONTEXT')),
-  linked_at  timestamptz not null,
+  linked_at  timestamptz not null default now(),
   primary key (case_id, attempt_id, role),
   foreign key (case_id, uut_id)    references investigation.investigation_case (id, uut_id),
   foreign key (attempt_id, uut_id) references investigation.test_attempt (id, uut_id)
