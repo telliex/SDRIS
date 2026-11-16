@@ -232,6 +232,8 @@ Storage rules in migration `0002_create_investigation_case_tables.sql` (the Engi
 - No status column, no lifecycle, no content rule on text, no uniqueness on external identifiers.
 
 Retrieval order (Q9) is explicit in SQL: `registered_at`, then `attempt_id`, then role order.
+The case and its links are loaded by **one** SQL statement, so the version and the links always come from the same snapshot
+(two statements could return a version older than the links under READ COMMITTED; found by Codex review of `f56c417`).
 
 Error codes the service returns as values are listed in section 12 of the
 [S0-05 specification](../specs/S0-05-investigation-aggregate-foundation.md).

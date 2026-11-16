@@ -643,6 +643,73 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.equal(loaded?.version, 1 + writers * each);
     });
 
+    /**
+     * Holds a committed-but-not-yet-visible change: another transaction locks the link table, bumps the case version and
+     * inserts a link, and commits only after `read` is blocked on that lock. Under READ COMMITTED a reader that loads the
+     * case in two separate statements would see the old version with the new link.
+     */
+    const readWhileAnotherWriterCommitsALink = async <T>(
+      c: InvestigationCase,
+      a: TestAttempt,
+      read: () => Promise<T>,
+    ): Promise<T> => {
+      const other = await target.connection.pool.connect();
+      try {
+        await other.query('begin');
+        await other.query(
+          'lock table investigation.case_test_attempt_link in access exclusive mode',
+        );
+        await other.query(
+          'update investigation.investigation_case set version = version + 1 where id = $1',
+          [c.id],
+        );
+        await other.query(
+          `insert into investigation.case_test_attempt_link (case_id, attempt_id, uut_id, role, linked_at) values ($1, $2, $3, 'RETEST', now())`,
+          [c.id, a.id, c.uut.id],
+        );
+        const reader = read();
+        for (let waited = 0; ; waited += 10) {
+          const blocked = await sql(
+            "select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
+          );
+          if (blocked[0].n >= 1) break;
+          assert.ok(waited < 5000, 'the reader never reached the lock');
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        await other.query('commit');
+        return await reader;
+      } finally {
+        other.release();
+      }
+    };
+
+    it('loads the case version and its links from one snapshot (no torn read)', async () => {
+      const { c, a } = await scenario();
+      const loaded = await readWhileAnotherWriterCommitsALink(c, a, () => service.getCase(c.id));
+      assert.ok(loaded);
+      assert.equal(
+        loaded.version,
+        1 + loaded.links.length,
+        'the version and the links must describe the same state',
+      );
+    });
+
+    it('reports an idempotent duplicate with the version it really has, never a stale one', async () => {
+      const { c, a } = await scenario();
+      const result = await readWhileAnotherWriterCommitsALink(c, a, () =>
+        service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' }),
+      );
+      // Either the writer's link was already visible (idempotent, version 2) or the call lost the race and must be a
+      // conflict that the caller retries; it must never claim "already linked" together with version 1.
+      if (result.ok) {
+        assert.equal(result.value.created, false);
+        assert.equal(result.value.version, 2);
+      } else {
+        assert.equal(result.error.code, 'investigation.concurrency_conflict');
+      }
+      assert.equal(await caseVersion(c.id), 2);
+    });
+
     it('rejects a stale write at the database boundary: the version predicate is atomic', async () => {
       const { c, a } = await scenario();
       await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });

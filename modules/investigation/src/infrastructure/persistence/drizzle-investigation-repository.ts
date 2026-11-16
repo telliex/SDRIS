@@ -164,19 +164,20 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
     id: InvestigationCaseId,
     tx?: TransactionToken,
   ): Promise<InvestigationCase | undefined> {
-    const executor = this.executor(tx);
-    const [row] = await executor
-      .select()
+    // ONE statement, so the version and the links come from the same snapshot. Two separate SELECTs would let a
+    // concurrent commit slip in between under READ COMMITTED and produce a state that never existed (a stale
+    // version with newer links).
+    const rows = await this.executor(tx)
+      .select({ case: investigationCase, link: caseTestAttemptLink })
       .from(investigationCase)
-      .where(eq(investigationCase.id, id));
-    if (!row) return undefined;
-    const linkRows = await executor
-      .select({ link: caseTestAttemptLink })
-      .from(caseTestAttemptLink)
-      .innerJoin(testAttempt, eq(caseTestAttemptLink.attemptId, testAttempt.id))
-      .where(eq(caseTestAttemptLink.caseId, id))
+      .leftJoin(caseTestAttemptLink, eq(caseTestAttemptLink.caseId, investigationCase.id))
+      .leftJoin(testAttempt, eq(caseTestAttemptLink.attemptId, testAttempt.id))
+      .where(eq(investigationCase.id, id))
       // Explicit and total: never rely on implicit row order (Owner decision Q9).
       .orderBy(asc(testAttempt.registeredAt), asc(caseTestAttemptLink.attemptId), roleOrder);
+    const row = rows[0]?.case;
+    if (!row) return undefined;
+    const linkRows = rows.flatMap((r) => (r.link ? [{ link: r.link }] : []));
     const caseId = stored(parseEntityId<'InvestigationCase'>(row.id, 'id'), 'case id');
     return Object.freeze({
       id: caseId,
