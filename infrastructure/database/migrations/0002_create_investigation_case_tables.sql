@@ -1,5 +1,6 @@
 -- S0-05: tables owned by the Investigation context (schema `investigation`). Minimal aggregate storage only.
--- No status columns and no lifecycle: those need the approved S0-05 specification.
+-- No status columns, no lifecycle and no content rules for descriptions: those need the approved S0-05
+-- specification.
 -- `uut_id` is an SDRIS internal identifier (UUIDv7) referencing a unit under test. It is a reference, not a
 -- foreign key: the UUT's authoritative owner is outside this migration.
 
@@ -17,7 +18,8 @@ create table investigation.failure_observation (
   id          uuid        primary key,
   case_id     uuid        not null,
   uut_id      uuid        not null,
-  description text        not null check (length(btrim(description)) > 0 and length(description) <= 2000),
+  -- No rules about the content of a description: none are specified yet, so none are enforced.
+  description text        not null,
   observed_at timestamptz not null,
   -- Cross-UUT rejection enforced by the database as well as by the domain: an observation can only be
   -- stored against a case whose UUT is the observation's UUT.

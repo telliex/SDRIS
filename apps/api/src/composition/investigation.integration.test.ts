@@ -150,16 +150,28 @@ describe('Investigation through the apps/api composition root (real PostgreSQL)'
       const c = await open();
       const result = await service.recordObservation({
         caseId: c.id,
-        uut: c.uut,
-        description: '   ',
+        uut: uut(),
+        description: 'wrong unit',
       });
-      assert.ok(!result.ok && result.error.code === 'investigation.invalid_description');
+      assert.ok(!result.ok && result.error.code === 'investigation.uut_mismatch');
       const [row] = await sql(
         'select version from investigation.investigation_case where id = $1',
         [c.id],
       );
       assert.equal(row.version, 1, 'the version must not have advanced');
       assert.equal((await service.getCase(c.id))?.observations.length, 0);
+    });
+
+    it('stores a description exactly as given, because no content rules are specified', async () => {
+      const c = await open();
+      const text = '  leading and trailing space \n' + 'y'.repeat(5000);
+      const stored = await service.recordObservation({
+        caseId: c.id,
+        uut: c.uut,
+        description: text,
+      });
+      assert.ok(stored.ok);
+      assert.equal((await service.getCase(c.id))?.observations[0]?.description, text);
     });
 
     it('rolls back the version bump when storing the observation fails inside the database', async () => {

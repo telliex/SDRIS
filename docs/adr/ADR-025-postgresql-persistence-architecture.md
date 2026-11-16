@@ -705,7 +705,8 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 - Whether the runtime composition needs a package build step for non-`tsx` execution.
 - The final home of a shared transaction contract (A2.6).
 - The Investigation aggregate itself: the S0-05 specification is not committed; the minimal aggregate in this change has no
-  status or lifecycle and is only a vehicle for verifying the persistence path.
+  status, no lifecycle and no content rules for descriptions (no trimming, length limit or emptiness rule), and is only a
+  vehicle for verifying the persistence path.
 
 ## 18. Acceptance and Change Control
 

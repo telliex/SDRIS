@@ -215,7 +215,8 @@ apps/api/src/composition/investigation.composition.ts   composition root (approv
 
 Storage rules in migration `0002_create_investigation_case_tables.sql`: a `version` column for optimistic concurrency,
 observations append-only, and a composite foreign key `(case_id, uut_id)` so the database itself refuses an observation whose
-UUT differs from its case's UUT. There is no status column and no lifecycle: the S0-05 specification is not committed, so
+UUT differs from its case's UUT. There is no status column, no lifecycle and no content rule for descriptions (an earlier draft
+trimmed and limited them; that was an unapproved assumption and was removed): the S0-05 specification is not committed, so
 the aggregate is the minimum needed to verify this path.
 
 **Validation of the existing transaction design (before changing it).** `UnitOfWork` and `executorFor` were kept unchanged:

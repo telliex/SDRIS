@@ -13,8 +13,9 @@ import {
  * Minimal Investigation aggregate used to carry a case and the failure observations recorded against it.
  *
  * Scope note: this is the smallest shape needed to exercise persistence, optimistic concurrency and the
- * cross-UUT rule. It deliberately has no status, no hypotheses and no lifecycle; those need the approved
- * S0-05 specification and an Owner decision (new domain state semantics).
+ * cross-UUT rule. It deliberately has no status, no hypotheses, no lifecycle and no rules about the content
+ * of a description (no trimming, no length limit, no emptiness rule): those need the approved S0-05
+ * specification and an Owner decision. The description is stored exactly as given.
  */
 export type InvestigationCaseId = EntityId<'InvestigationCase'>;
 export type FailureObservationId = EntityId<'FailureObservation'>;
@@ -41,15 +42,12 @@ export interface InvestigationCase {
 export type InvestigationDomainErrorCode =
   | 'investigation.uut_mismatch'
   | 'investigation.case_mismatch'
-  | 'investigation.duplicate_observation'
-  | 'investigation.invalid_description';
+  | 'investigation.duplicate_observation';
 
 export type InvestigationDomainError = SdrisError<
   InvestigationDomainErrorCode,
   { readonly expected?: string; readonly actual?: string }
 >;
-
-export const MAX_DESCRIPTION_LENGTH = 2000;
 
 export function openCase(input: {
   readonly id: InvestigationCaseId;
@@ -88,15 +86,6 @@ export function recordObservation(
       }),
     );
   }
-  const description = observation.description.trim();
-  if (description === '' || description.length > MAX_DESCRIPTION_LENGTH) {
-    return err(
-      createError({
-        code: 'investigation.invalid_description' as const,
-        message: `The description must be 1 to ${MAX_DESCRIPTION_LENGTH} characters.`,
-      }),
-    );
-  }
   if (investigationCase.observations.some((existing) => existing.id === observation.id)) {
     return err(
       createError({
@@ -111,7 +100,7 @@ export function recordObservation(
       ...investigationCase,
       observations: Object.freeze([
         ...investigationCase.observations,
-        Object.freeze({ ...observation, description }),
+        Object.freeze({ ...observation }),
       ]),
     }),
   );

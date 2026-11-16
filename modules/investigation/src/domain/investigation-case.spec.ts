@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createEntityRef, newEntityId, parseTimestamp, type Timestamp } from '@sdris/shared-kernel';
 import {
-  MAX_DESCRIPTION_LENGTH,
   openCase,
   recordObservation,
   type FailureObservation,
@@ -55,10 +54,13 @@ describe('Investigation aggregate', () => {
     assert.equal(result.value.version, c.version, 'the version only changes when persisted');
   });
 
-  it('trims the description', () => {
+  it('stores the description exactly as given: no trimming and no content rules are invented', () => {
     const c = newCase();
-    const result = recordObservation(c, observation(c, { description: '  spaced  ' }));
-    assert.ok(result.ok && result.value.observations[0]!.description === 'spaced');
+    for (const description of ['  spaced  ', '', 'x'.repeat(5000), 'line one\nline two']) {
+      const result = recordObservation(c, observation(c, { description }));
+      assert.ok(result.ok, JSON.stringify(description.slice(0, 20)));
+      assert.equal(result.value.observations[0]!.description, description);
+    }
   });
 
   it('refuses evidence from another UUT and attaches nothing', () => {
@@ -79,20 +81,6 @@ describe('Investigation aggregate', () => {
       observation(c, { caseId: newEntityId<'InvestigationCase'>() }),
     );
     assert.ok(!result.ok && result.error.code === 'investigation.case_mismatch');
-  });
-
-  it('refuses empty, blank and over-long descriptions', () => {
-    const c = newCase();
-    for (const description of ['', '   ', 'x'.repeat(MAX_DESCRIPTION_LENGTH + 1)]) {
-      const result = recordObservation(c, observation(c, { description }));
-      assert.ok(
-        !result.ok && result.error.code === 'investigation.invalid_description',
-        description.slice(0, 10),
-      );
-    }
-    assert.ok(
-      recordObservation(c, observation(c, { description: 'x'.repeat(MAX_DESCRIPTION_LENGTH) })).ok,
-    );
   });
 
   it('refuses a duplicate observation id', () => {
