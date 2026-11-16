@@ -196,7 +196,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       );
     });
 
-    it('refuses a duplicate id for a UUT, an attempt and a case, keeping the original', async () => {
+    it('refuses a duplicate id for a UUT and for an attempt, keeping the original', async () => {
       const fixedUut = newEntityId<'UUT'>();
       const module = createInvestigationModule(createPersistenceHandle(target.connection), {
         newId: <T extends string>() =>
@@ -207,6 +207,29 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const second = await module.registerUut({ serialNumber: 'IMPOSTOR' });
       assert.ok(!second.ok && second.error.code === 'investigation.uut_already_exists');
       assert.equal((await service.getUut(first.value.id))?.serialNumber, 'ORIGINAL');
+
+      const fixedAttempt = newEntityId<'TestAttempt'>();
+      const attempts = createInvestigationModule(createPersistenceHandle(target.connection), {
+        newId: <T extends string>() =>
+          fixedAttempt as unknown as import('@sdris/shared-kernel').EntityId<T>,
+      }).service;
+      const firstAttempt = await attempts.registerTestAttempt({
+        uutId: first.value.id,
+        stage: 'IST',
+        externalExecutionReference: 'ORIGINAL-RUN',
+      });
+      assert.ok(firstAttempt.ok);
+      const secondAttempt = await attempts.registerTestAttempt({
+        uutId: first.value.id,
+        stage: 'SAT',
+        externalExecutionReference: 'IMPOSTOR-RUN',
+      });
+      assert.ok(
+        !secondAttempt.ok && secondAttempt.error.code === 'investigation.attempt_already_exists',
+      );
+      const kept = await service.getTestAttempt(fixedAttempt);
+      assert.equal(kept?.externalExecutionReference, 'ORIGINAL-RUN');
+      assert.equal(kept?.stage, 'IST');
     });
 
     it('keeps UUT, attempt and link rows immutable (database trigger)', async () => {
