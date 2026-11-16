@@ -1,8 +1,8 @@
 # S0-05 — Owner Decision Register
 
-**Status:** PROPOSED — prepared for the Engineering Owner. **No decision in this register has been made.**
-Every "Recommended choice" below is a recommendation only. Nothing here is approved, and no domain code, schema or
-migration changes until the Owner records a decision and approves the scope.
+**Status:** DECIDED — the Engineering Owner answered Q1 to Q10 (APPROVED WITH CHANGES). The decisions are recorded verbatim
+in [S0-05-owner-approval.md](S0-05-owner-approval.md) and summarised in the table below. The "Recommended choice" text further
+down is the original proposal and is kept for traceability; where it differs from the decision, **the decision wins**.
 
 **Sources:** [S0-05 specification](S0-05-investigation-aggregate-foundation.md) (PROPOSED),
 [gap analysis](S0-05-gap-analysis.md) section 6 (the ten questions, quoted verbatim below),
@@ -21,7 +21,27 @@ rules, new domain state semantics, public API compatibility).
 
 ---
 
-## Summary of recommendations (non-binding)
+## Recorded Owner decisions
+
+| #   | Decision               | Outcome                                                                                                                                            | Differs from the recommendation                                      |
+| --- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Q1  | Approval               | APPROVED WITH CHANGES; the revised specification becomes the baseline once verified against the decision record                                    | no                                                                   |
+| Q2  | UUT ownership          | APPROVED: Investigation owns the UUT table; case and attempt use foreign keys; transfer needs a separate decision                                  | no (the "provisional" note becomes "separate decision")              |
+| Q3  | UUT attributes         | APPROVED: optional, not unique, stored as supplied                                                                                                 | no                                                                   |
+| Q4  | TestAttempt            | APPROVED WITH CHANGES: stage required from a controlled vocabulary (`IST`, `SAT`); external execution reference optional and not unique; immutable | yes: controlled stage vocabulary; the reference is optional          |
+| Q5  | Link semantics         | APPROVED WITH CONDITIONS: key `(case_id, attempt_id, role)`; idempotent duplicates; multiple `INITIAL_FAILURE` allowed; roles immutable            | no (multiplicity stated explicitly: several `INITIAL_FAILURE` links) |
+| Q6  | Aggregate, concurrency | APPROVED WITH CHANGES: link inside the case aggregate; new link bumps the version, an idempotent duplicate does not; no hidden retries             | no (adds: no hidden repository retries)                              |
+| Q7  | Case content           | APPROVED WITH CHANGES: `opened_at` is retained; five distinguishing error cases                                                                    | yes: `opened_at` kept                                                |
+| Q8  | FailureObservation     | APPROVED FOR REMOVAL after replacement tests exist                                                                                                 | no                                                                   |
+| Q9  | Retrieval order        | APPROVED WITH CHANGES: `registered_at`, then `attempt_id`, then role order                                                                         | yes: `registered_at` first                                           |
+| Q10 | Timestamps             | APPROVED WITH CHANGES: `created_at`, `registered_at`, `opened_at`, `linked_at`; `timestamptz`, UTC                                                 | yes: timestamps are required                                         |
+
+Migration policy: the Owner authorised revising the unreleased `0002` after re-verifying that nothing shared depends on its
+checksum (see [the persistence policy](S0-05-proposed-persistence-policy.md) section 10).
+
+---
+
+## Summary of recommendations (non-binding, original proposal)
 
 | #   | Topic                     | Recommended choice                                                                                            |
 | --- | ------------------------- | ------------------------------------------------------------------------------------------------------------- |

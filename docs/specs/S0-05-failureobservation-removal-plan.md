@@ -1,8 +1,9 @@
 # S0-05 — FailureObservation Removal Plan
 
-**Status:** PROPOSED. **Nothing in this plan has been executed.** `FailureObservation` is deferred by section 9 of the
-[S0-05 specification](S0-05-investigation-aggregate-foundation.md) but exists in PR #6. It stays untouched until the
-Engineering Owner approves the scope (Register Q1 and Q8) **and** the link model (Q5 and Q6).
+**Status:** APPROVED by the Engineering Owner (Q8, [approval record](S0-05-owner-approval.md)) and executed in the commits
+of PR #6 in the order below. `FailureObservation` is deferred by section 9 of the
+[S0-05 specification](S0-05-investigation-aggregate-foundation.md); it is replaced by `CaseTestAttemptLink` first and removed
+afterwards.
 
 ## 1. Why the order matters
 
