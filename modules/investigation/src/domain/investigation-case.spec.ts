@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { newEntityId } from '@sdris/shared-kernel';
 import { openCase } from './investigation-case';
-import { newCase, timestamp, uutRef } from './test-builders.spec';
+import { newCase, uutRef } from './test-builders.spec';
 
 describe('InvestigationCase aggregate', () => {
   it('opens a case at version 1 with no links and a frozen state', () => {
@@ -17,14 +17,10 @@ describe('InvestigationCase aggregate', () => {
     assert.deepEqual(Object.keys(c).sort(), ['id', 'links', 'openedAt', 'uut', 'version']);
   });
 
-  it('records when SDRIS opened the investigation and references exactly one UUT', () => {
+  it('opens a draft with only identity and UUT: no timestamp (PostgreSQL generates opened_at)', () => {
     const uut = uutRef();
-    const opened = openCase({
-      id: newEntityId<'InvestigationCase'>(),
-      uut,
-      openedAt: timestamp('2026-11-15T10:00:00.000Z'),
-    });
-    assert.equal(opened.openedAt, '2026-11-15T10:00:00.000Z');
-    assert.equal(opened.uut.id, uut.id);
+    const draft = openCase({ id: newEntityId<'InvestigationCase'>(), uut });
+    assert.deepEqual(Object.keys(draft).sort(), ['id', 'uut']);
+    assert.equal(draft.uut.id, uut.id);
   });
 });

@@ -29,24 +29,33 @@ export type LinkRole = (typeof LINK_ROLES)[number];
  * Association between one case and one attempt of the same UUT. Identified by (case, attempt, role); the role
  * is immutable, so changing a role means creating another link. Never inferred automatically.
  */
-export interface CaseTestAttemptLink {
+export interface NewCaseTestAttemptLink {
   readonly caseId: InvestigationCaseId;
   readonly attemptId: TestAttemptId;
   /** The UUT both sides belong to. */
   readonly uut: UutRef;
   readonly role: LinkRole;
-  /** When SDRIS recorded the link. */
+}
+
+/** A stored link. */
+export interface CaseTestAttemptLink extends NewCaseTestAttemptLink {
+  /** When SDRIS recorded the link (database clock, UTC). */
   readonly linkedAt: Timestamp;
 }
 
-export interface InvestigationCase {
+/** A case that has not been stored yet. PostgreSQL generates `opened_at` on insert. */
+export interface NewInvestigationCase {
   readonly id: InvestigationCaseId;
   readonly uut: UutRef;
-  /** When SDRIS opened the investigation. */
+}
+
+/** A stored case, as loaded: its version and its links belong to one database snapshot. */
+export interface InvestigationCase extends NewInvestigationCase {
+  /** When SDRIS opened the investigation (database clock, UTC). */
   readonly openedAt: Timestamp;
   /** The persisted version this state was loaded at (1 for a newly opened case). */
   readonly version: number;
-  /** In retrieval order (registered_at, attempt id, role) when loaded; a newly added link is appended. */
+  /** In retrieval order (registered_at, attempt id, role). */
   readonly links: readonly CaseTestAttemptLink[];
 }
 
@@ -75,33 +84,28 @@ export function parseLinkRole(value: unknown): Result<LinkRole, InvestigationDom
 export function openCase(input: {
   readonly id: InvestigationCaseId;
   readonly uut: UutRef;
-  readonly openedAt: Timestamp;
-}): InvestigationCase {
-  return Object.freeze({
-    ...input,
-    version: 1,
-    links: Object.freeze([]),
-  });
-}
-
-export interface LinkOutcome {
-  /** The case with the link present. The very same instance when the request was a duplicate. */
-  readonly investigationCase: InvestigationCase;
-  readonly link: CaseTestAttemptLink;
-  /** False for an identical repeat: nothing changes and the version must not advance. */
-  readonly created: boolean;
+}): NewInvestigationCase {
+  return Object.freeze({ id: input.id, uut: input.uut });
 }
 
 /**
- * Links an attempt to the case. A mismatch between the UUT of the case and the UUT of the attempt is refused and
- * nothing is attached. An identical link (same attempt and role) is idempotent: the existing link, with its original
- * `linkedAt`, is returned and nothing is overwritten. The same attempt with another role is a different link.
+ * The result of a link request: either the existing identical link (nothing to write, the version must not advance)
+ * or the new link to store. A new link has no timestamp yet: PostgreSQL generates `linked_at` when it is stored.
+ */
+export type LinkOutcome =
+  | { readonly created: false; readonly link: CaseTestAttemptLink }
+  | { readonly created: true; readonly link: NewCaseTestAttemptLink };
+
+/**
+ * Decides how to link an attempt to the case. A mismatch between the UUT of the case and the UUT of the attempt is
+ * refused and nothing is attached. An identical link (same attempt and role) is idempotent: the existing link, with
+ * its original `linkedAt`, is returned and nothing is overwritten. The same attempt with another role is a different
+ * link. Persisting the new link and advancing the case version is the repository's single atomic step.
  */
 export function linkTestAttempt(
   investigationCase: InvestigationCase,
-  attempt: TestAttempt,
+  attempt: Pick<TestAttempt, 'id' | 'uut'>,
   role: LinkRole,
-  linkedAt: Timestamp,
 ): Result<LinkOutcome, InvestigationDomainError> {
   if (
     attempt.uut.entityType !== investigationCase.uut.entityType ||
@@ -118,22 +122,14 @@ export function linkTestAttempt(
   const existing = investigationCase.links.find(
     (candidate) => candidate.attemptId === attempt.id && candidate.role === role,
   );
-  if (existing) {
-    return ok({ investigationCase, link: existing, created: false });
-  }
-  const link: CaseTestAttemptLink = Object.freeze({
-    caseId: investigationCase.id,
-    attemptId: attempt.id,
-    uut: investigationCase.uut,
-    role,
-    linkedAt,
-  });
+  if (existing) return ok({ created: false, link: existing });
   return ok({
-    investigationCase: Object.freeze({
-      ...investigationCase,
-      links: Object.freeze([...investigationCase.links, link]),
-    }),
-    link,
     created: true,
+    link: Object.freeze({
+      caseId: investigationCase.id,
+      attemptId: attempt.id,
+      uut: investigationCase.uut,
+      role,
+    }),
   });
 }

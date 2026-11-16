@@ -11,7 +11,7 @@ export const uut = investigation.table('uut', {
   id: uuid('id').primaryKey(),
   serialNumber: text('serial_number'),
   hostname: text('hostname'),
-  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });
 
 export const testAttempt = investigation.table('test_attempt', {
@@ -19,13 +19,15 @@ export const testAttempt = investigation.table('test_attempt', {
   uutId: uuid('uut_id').notNull(),
   stage: text('stage').notNull(),
   externalExecutionReference: text('external_execution_reference'),
-  registeredAt: timestamp('registered_at', { withTimezone: true, mode: 'date' }).notNull(),
+  registeredAt: timestamp('registered_at', { withTimezone: true, mode: 'date' })
+    .notNull()
+    .defaultNow(),
 });
 
 export const investigationCase = investigation.table('investigation_case', {
   id: uuid('id').primaryKey(),
   uutId: uuid('uut_id').notNull(),
-  openedAt: timestamp('opened_at', { withTimezone: true, mode: 'date' }).notNull(),
+  openedAt: timestamp('opened_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   version: integer('version').notNull().default(1),
 });
 
@@ -34,5 +36,5 @@ export const caseTestAttemptLink = investigation.table('case_test_attempt_link',
   attemptId: uuid('attempt_id').notNull(),
   uutId: uuid('uut_id').notNull(),
   role: text('role').notNull(),
-  linkedAt: timestamp('linked_at', { withTimezone: true, mode: 'date' }).notNull(),
+  linkedAt: timestamp('linked_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 });

@@ -5,7 +5,6 @@ import {
   type EntityId,
   type Result,
   type SdrisError,
-  type Timestamp,
 } from '@sdris/shared-kernel';
 import {
   linkTestAttempt,
@@ -86,7 +85,6 @@ export interface InvestigationService {
 export interface InvestigationServiceDependencies {
   readonly repository: InvestigationRepository;
   readonly transactions: TransactionScope;
-  readonly now: () => Timestamp;
   readonly newId: <TType extends string>() => EntityId<TType>;
 }
 
@@ -131,14 +129,15 @@ export function createInvestigationService(
   return {
     registerUut: (command) =>
       transactional(async (tx) => {
-        const created = createUut({
-          id: deps.newId<'UUT'>(),
-          ...(command.serialNumber === undefined ? {} : { serialNumber: command.serialNumber }),
-          ...(command.hostname === undefined ? {} : { hostname: command.hostname }),
-          createdAt: deps.now(),
-        });
-        const added = await deps.repository.addUut(created, tx);
-        return added.ok ? ok(created) : err(added.error);
+        // Callers cannot supply a timestamp: PostgreSQL generates `created_at` and the stored UUT is returned.
+        return deps.repository.addUut(
+          createUut({
+            id: deps.newId<'UUT'>(),
+            ...(command.serialNumber === undefined ? {} : { serialNumber: command.serialNumber }),
+            ...(command.hostname === undefined ? {} : { hostname: command.hostname }),
+          }),
+          tx,
+        );
       }),
 
     getUut: (id) => deps.repository.getUut(id),
@@ -156,10 +155,8 @@ export function createInvestigationService(
           ...(command.externalExecutionReference === undefined
             ? {}
             : { externalExecutionReference: command.externalExecutionReference }),
-          registeredAt: deps.now(),
         });
-        const added = await deps.repository.addTestAttempt(registered, tx);
-        return added.ok ? ok(registered) : err(added.error);
+        return deps.repository.addTestAttempt(registered, tx);
       }),
 
     getTestAttempt: (id) => deps.repository.getTestAttempt(id),
@@ -168,13 +165,10 @@ export function createInvestigationService(
       transactional(async (tx) => {
         const owner = await deps.repository.getUut(command.uut.id, tx);
         if (!owner) return notFound('investigation.uut_not_found', 'UUT', command.uut.id);
-        const created = openCase({
-          id: deps.newId<'InvestigationCase'>(),
-          uut: command.uut,
-          openedAt: deps.now(),
-        });
-        const added = await deps.repository.add(created, tx);
-        return added.ok ? ok(created) : err(added.error);
+        return deps.repository.add(
+          openCase({ id: deps.newId<'InvestigationCase'>(), uut: command.uut }),
+          tx,
+        );
       }),
 
     getCase: (id) => deps.repository.get(id),
@@ -189,7 +183,7 @@ export function createInvestigationService(
         if (!attempt) {
           return notFound('investigation.attempt_not_found', 'test attempt', command.attemptId);
         }
-        const outcome = linkTestAttempt(current, attempt, role.value, deps.now());
+        const outcome = linkTestAttempt(current, attempt, role.value);
         if (!outcome.ok) return err(outcome.error);
         if (!outcome.value.created) {
           // Idempotent duplicate: nothing is written and the version does not advance.
@@ -199,9 +193,9 @@ export function createInvestigationService(
             created: false,
           });
         }
-        const saved = await deps.repository.save(outcome.value.investigationCase, tx);
+        const saved = await deps.repository.addLink(current, outcome.value.link, tx);
         return saved.ok
-          ? ok({ version: saved.value.version, link: outcome.value.link, created: true })
+          ? ok({ version: saved.value.version, link: saved.value.link, created: true })
           : err(saved.error);
       }),
   };
