@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/test-only-entrypoint",
+      "file": "apps/api/src/x.ts"
+    },
+    {
+      "rule": "dependency/test-only-entrypoint",
+      "file": "apps/api/src/x.ts"
+    }
+  ]
+}

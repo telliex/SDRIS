@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "composition/adapter-exposure",
+      "file": "modules/investigation/src/composition/index.ts"
+    }
+  ]
+}

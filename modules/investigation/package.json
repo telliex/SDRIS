@@ -5,9 +5,37 @@
   "main": "src/public/index.ts",
   "types": "src/public/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --conditions=sdris-source --test \"src/**/*.spec.ts\"",
+    "build": "tsc -p tsconfig.build.json"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.3"
+  },
+  "exports": {
+    ".": {
+      "sdris-source": "./src/public/index.ts",
+      "types": "./dist/public/index.d.ts",
+      "default": "./dist/public/index.js"
+    },
+    "./composition": {
+      "sdris-source": "./src/composition/index.ts",
+      "types": "./dist/composition/index.d.ts",
+      "default": "./dist/composition/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "composition": [
+        "src/composition/index.ts"
+      ]
+    }
+  },
+  "dependencies": {
+    "@sdris/database": "workspace:^",
+    "@sdris/shared-kernel": "workspace:^",
+    "drizzle-orm": "^0.45.4"
   }
 }

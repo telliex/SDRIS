@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/infrastructure-inversion",
+      "file": "modules/investigation/src/shared/utils/barrel.ts"
+    },
+    {
+      "rule": "boundary/infrastructure-inversion",
+      "file": "modules/investigation/test/uses-adapter.ts"
+    }
+  ]
+}

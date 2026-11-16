@@ -1,0 +1,6 @@
+{
+  "name": "@sdris/investigation",
+  "exports": {
+    ".": "./src/composition/index.ts"
+  }
+}

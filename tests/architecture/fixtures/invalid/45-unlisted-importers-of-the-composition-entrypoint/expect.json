@@ -1,0 +1,28 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/composition-access",
+      "file": "apps/web/src/page.ts"
+    },
+    {
+      "rule": "dependency/composition-access",
+      "file": "apps/worker/src/jobs.ts"
+    },
+    {
+      "rule": "dependency/composition-access",
+      "file": "packages/contracts/src/c.ts"
+    },
+    {
+      "rule": "dependency/composition-access",
+      "file": "packages/shared-kernel/src/k.ts"
+    },
+    {
+      "rule": "dependency/composition-access",
+      "file": "infrastructure/database/src/g.ts"
+    },
+    {
+      "rule": "cycle/cross-package",
+      "file": "infrastructure/database/src/g.ts"
+    }
+  ]
+}

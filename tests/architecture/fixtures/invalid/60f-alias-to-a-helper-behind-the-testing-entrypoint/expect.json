@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "boundary/private-import",
+      "file": "apps/api/src/x.ts"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "modules/investigation/src/domain/db.ts"
+    }
+  ]
+}

@@ -4,5 +4,6 @@
       "rule": "dependency/direction",
       "file": "infrastructure/database/src/adapter.ts"
     }
-  ]
+  ],
+  "messageIncludes": "Global Infrastructure"
 }

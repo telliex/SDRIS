@@ -69,3 +69,64 @@ export function extractImports(source, fileName) {
   visit(sf);
   return { imports, unanalyzable };
 }
+
+/**
+ * Finds names that a file imports and then exports without a module specifier, such as
+ * `import { Adapter } from '../infrastructure/a'; export { Adapter };` or `export default Adapter`.
+ * `extractImports` cannot see these because the export statement has no `from` clause, yet they expose
+ * the imported binding exactly like `export { Adapter } from '../infrastructure/a'` does.
+ * Returns `{ specifier, name, line }` for each such name.
+ */
+export function extractLocalReexports(source, fileName) {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, false);
+  const bindings = new Map(); // local name -> module specifier
+  const lineOf = (node) => sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
+
+  for (const statement of sf.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier)) {
+      const clause = statement.importClause;
+      if (!clause) continue;
+      const specifier = statement.moduleSpecifier.text;
+      if (clause.name) bindings.set(clause.name.text, specifier);
+      const named = clause.namedBindings;
+      if (named && ts.isNamespaceImport(named)) bindings.set(named.name.text, specifier);
+      if (named && ts.isNamedImports(named)) {
+        for (const element of named.elements) bindings.set(element.name.text, specifier);
+      }
+    } else if (
+      ts.isImportEqualsDeclaration(statement) &&
+      ts.isExternalModuleReference(statement.moduleReference) &&
+      ts.isStringLiteral(statement.moduleReference.expression)
+    ) {
+      bindings.set(statement.name.text, statement.moduleReference.expression.text);
+    }
+  }
+
+  const found = [];
+  for (const statement of sf.statements) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier === undefined &&
+      statement.exportClause !== undefined &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      for (const element of statement.exportClause.elements) {
+        const local = (element.propertyName ?? element.name).text;
+        if (bindings.has(local)) {
+          found.push({ specifier: bindings.get(local), name: local, line: lineOf(element) });
+        }
+      }
+    } else if (
+      ts.isExportAssignment(statement) &&
+      ts.isIdentifier(statement.expression) &&
+      bindings.has(statement.expression.text)
+    ) {
+      found.push({
+        specifier: bindings.get(statement.expression.text),
+        name: statement.expression.text,
+        line: lineOf(statement),
+      });
+    }
+  }
+  return found;
+}

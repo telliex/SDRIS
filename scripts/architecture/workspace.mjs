@@ -27,10 +27,48 @@ function readEntrypoints(dir, manifest) {
     const absolute = path.resolve(dir, rel);
     return resolveFile(absolute) ?? absolute;
   };
-  const pick = (value) => {
+  const conditionIssues = [];
+  const SOURCE_CONDITION = 'sdris-source';
+  /**
+   * An entrypoint written as `{ "sdris-source": "./src/x.ts", "types": "./dist/x.d.ts", "default": "./dist/x.js" }`
+   * is judged by its source target. `types` and `default` are what TypeScript consumers and plain Node actually
+   * load, so each must be the exact dist mirror of the source target; otherwise a compiled private file could
+   * become the real public entrypoint while the checker looks only at the source.
+   */
+  const pickConditional = (subpath, value) => {
+    const source = value[SOURCE_CONDITION];
+    const mirror = typeof source === 'string' ? source.replace(/^\.\/src\//, './dist/') : undefined;
+    const expected = {
+      types: mirror?.replace(/\.[cm]?tsx?$/, '.d.ts'),
+      default: mirror?.replace(/\.[cm]?tsx?$/, '.js'),
+    };
+    if (typeof source !== 'string' || !source.startsWith('./src/')) {
+      conditionIssues.push(`"${subpath}": "${SOURCE_CONDITION}" must be a path under ./src/`);
+      return [];
+    }
+    for (const key of Object.keys(value)) {
+      if (key !== SOURCE_CONDITION && key !== 'types' && key !== 'default') {
+        conditionIssues.push(
+          `"${subpath}": condition "${key}" is not supported (only ${SOURCE_CONDITION}, types, default)`,
+        );
+      }
+    }
+    for (const key of ['types', 'default']) {
+      if (value[key] === undefined) {
+        conditionIssues.push(`"${subpath}": missing "${key}" (expected ${expected[key]})`);
+      } else if (value[key] !== expected[key]) {
+        conditionIssues.push(
+          `"${subpath}": "${key}" is ${JSON.stringify(value[key])} but must be the dist mirror of "${source}" (${expected[key]})`,
+        );
+      }
+    }
+    return [source];
+  };
+  const pick = (value, subpath = '.') => {
     if (typeof value === 'string') return [value];
     if (value && typeof value === 'object') {
-      return Object.values(value).flatMap(pick);
+      if (SOURCE_CONDITION in value) return pickConditional(subpath, value);
+      return Object.values(value).flatMap((v) => pick(v, subpath));
     }
     return [];
   };
@@ -45,13 +83,13 @@ function readEntrypoints(dir, manifest) {
         issues.push(subpath);
         continue;
       }
-      entries.set(subpath, new Set(pick(target).map(abs)));
+      entries.set(subpath, new Set(pick(target, subpath).map(abs)));
     }
   } else {
     const files = [manifest.main, manifest.types].filter((f) => typeof f === 'string');
     entries.set('.', new Set((files.length > 0 ? files : ['src/index.ts']).map(abs)));
   }
-  return { entries, unsupportedPatterns: issues };
+  return { entries, unsupportedPatterns: issues, conditionIssues };
 }
 
 export function loadWorkspace(root) {
@@ -73,7 +111,7 @@ export function loadWorkspace(root) {
             : group === 'infrastructure'
               ? 'infrastructure'
               : SHARED_PACKAGE_LAYERS[entry.name];
-      const { entries, unsupportedPatterns } = readEntrypoints(dir, manifest);
+      const { entries, unsupportedPatterns, conditionIssues } = readEntrypoints(dir, manifest);
       packages.push({
         name: manifest.name,
         short: entry.name,
@@ -85,7 +123,9 @@ export function loadWorkspace(root) {
         manifestPath,
         entries,
         entryFiles: new Set([...entries.values()].flatMap((s) => [...s])),
+        compositionFiles: entries.get('./composition') ?? new Set(),
         unsupportedPatterns,
+        conditionIssues,
       });
     }
   }
@@ -125,3 +165,20 @@ export function listSourceFiles(pkg) {
 
 export const isTestFile = (file) =>
   /\.(?:spec|test)\.[cm]?[jt]sx?$/.test(file) || file.split(path.sep).includes('__tests__');
+
+/**
+ * Architectural zone of a file inside a module package, by source path: `src/public`, `src/domain`,
+ * `src/application`, `src/infrastructure` (Context Infrastructure), `src/composition` (the dedicated
+ * composition entry zone) or `other`.
+ * `ignoreCase` is used for import *targets*: on a case-insensitive file system `../Infrastructure/x` resolves
+ * to the same directory, so a target must never escape the zone by spelling. An importing file is matched
+ * exactly, so a directory merely spelled `Infrastructure` is not granted infrastructure rights.
+ */
+export function zoneOf(pkg, file, { ignoreCase = false } = {}) {
+  const rel = toPosix(path.relative(pkg.dir, file));
+  const m = new RegExp(
+    '^src/(public|domain|application|infrastructure|composition)(/|$)',
+    ignoreCase ? 'i' : '',
+  ).exec(rel);
+  return m ? m[1].toLowerCase() : 'other';
+}

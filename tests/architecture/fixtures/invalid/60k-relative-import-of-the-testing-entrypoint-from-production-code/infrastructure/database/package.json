@@ -1,0 +1,11 @@
+{
+  "name": "@sdris/database",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "*",
+    "pg": "*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/application/q.ts"
+    }
+  ],
+  "messageIncludes": "only from src/infrastructure/**"
+}

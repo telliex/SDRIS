@@ -1,0 +1,6 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": { "@dbt": ["../../infrastructure/database/src/testing/index.ts"] }
+  }
+}

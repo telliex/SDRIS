@@ -14,11 +14,19 @@ export const base = tseslint.config(
       '**/next-env.d.ts',
       // Deliberately invalid sources used by architecture tests (e.g. require() on purpose).
       'tests/architecture/fixtures/**',
+      'tests/architecture/type-surface/**',
     ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   { languageOptions: { globals: { ...globals.node } } },
+  {
+    // Plain CommonJS scripts that must run in unmodified Node (for example the compiled-runtime smoke
+    // child) use require() on purpose.
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
 );
 
 export { prettier };

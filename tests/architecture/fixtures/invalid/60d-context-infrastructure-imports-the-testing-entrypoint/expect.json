@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/test-only-entrypoint",
+      "file": "modules/investigation/src/infrastructure/persistence/seed.ts"
+    }
+  ]
+}

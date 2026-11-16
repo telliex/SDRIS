@@ -1,0 +1,19 @@
+{
+  "name": "@sdris/investigation",
+  "exports": {
+    ".": {
+      "sdris-source": "./src/public/index.ts",
+      "types": "./dist/public/index.d.ts",
+      "default": "./dist/infrastructure/persistence/adapter.js"
+    },
+    "./composition": {
+      "sdris-source": "./src/composition/index.ts",
+      "types": "./dist/composition/index.d.ts",
+      "default": "./dist/composition/index.js"
+    }
+  },
+  "dependencies": {
+    "drizzle-orm": "*",
+    "@sdris/database": "workspace:*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "infrastructure/database/src/index.ts"
+    }
+  ],
+  "messageIncludes": "Global Infrastructure"
+}

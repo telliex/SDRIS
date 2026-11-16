@@ -5,5 +5,5 @@
       "file": "modules/investigation/src/domain/repo.ts"
     }
   ],
-  "messageIncludes": "persistence-independent"
+  "messageIncludes": "only from src/infrastructure/**"
 }

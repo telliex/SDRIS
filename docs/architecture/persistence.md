@@ -61,7 +61,10 @@ Enforced by `pnpm check:architecture` (S0-03 rules, extended in this task; see
 - Modules, contracts, config, testing and the shared kernel cannot import ORMs, query builders or database
   drivers (`drizzle-orm`, `drizzle-kit`, `kysely`, `pg`, `postgres`, `knex`, `typeorm`, `prisma`, ...), nor declare
   them in their manifests.
-- Modules cannot import `@sdris/database` (default-deny layer rule).
+- Modules cannot import `@sdris/database` or an ORM from `src/domain`, `src/application` or `src/public`. Only a context's
+  `src/infrastructure/**` may, and only if allowlisted in `dependency-matrix.json` (`contextInfrastructure`, empty by
+  default in the generic policy; Investigation is listed). A module's `src/composition/**` may import the database package
+  only with `import type`. This is **proposed** in ADR-025 Amendments A1 and A2 and is not yet approved.
 
 ### Transactions without leaking ORM types
 
@@ -176,17 +179,17 @@ These prove technical capability only. The Audit and Transactional Outbox workfl
 
 ## 6. Open items and where ADR-025 treats them (all remain PROPOSED)
 
-| Item                                                                                                   | ADR-025                  | State in this PR                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Drizzle ORM + SQL-first migrations                                                                     | Decision 1, 2            | Implemented as proposed                                                                                                                                                             |
-| Ten-schema ownership baseline                                                                          | Decision 3               | Implemented; Retrieval schema and audit/outbox/inbox/jobs ownership deferred                                                                                                        |
-| `infrastructure` layer policy and persistence-library ban                                              | Decision 4               | Implemented in the S0-03 checker with fixtures                                                                                                                                      |
-| `UnitOfWork` / `TransactionContext` home                                                               | Decision 5 (conditional) | Kept inside `@sdris/database`; S0-05 must re-evaluate with a real repository                                                                                                        |
-| Module-owned repository adapters depending on `@sdris/database` and their own module's public contract | Decision 6               | **Not implemented**: the checker still denies `module -> @sdris/database` and `infrastructure -> module`. ADR-025 requires a narrow, tested refinement before S0-05 adds an adapter |
-| Atomic domain + audit + outbox, idempotency, optimistic concurrency                                    | Decision 7, 8            | Capability verified with test-only tables; workflows not implemented                                                                                                                |
-| `drizzle-kit`                                                                                          | Decision 9 (deferred)    | Not adopted                                                                                                                                                                         |
-| Database integration tests and CI                                                                      | Decision 10              | `pnpm db:test` works locally; CI job belongs to S0-10, so local results are not an independently verified CI result                                                                 |
-| Reset safety                                                                                           | Decision 11              | Enforced in code with negative tests                                                                                                                                                |
+| Item                                                                                     | ADR-025                          | State in this PR                                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drizzle ORM + SQL-first migrations                                                       | Decision 1, 2                    | Implemented as proposed                                                                                                                                                                                                         |
+| Ten-schema ownership baseline                                                            | Decision 3                       | Implemented; Retrieval schema and audit/outbox/inbox/jobs ownership deferred                                                                                                                                                    |
+| `infrastructure` layer policy and persistence-library ban                                | Decision 4                       | Implemented in the S0-03 checker with fixtures                                                                                                                                                                                  |
+| `UnitOfWork` / `TransactionContext` home                                                 | Decision 5 (conditional)         | Kept inside `@sdris/database`; S0-05 must re-evaluate with a real repository                                                                                                                                                    |
+| Module-owned repository adapters (Context Infrastructure) depending on `@sdris/database` | Decision 6, Amendments A1 and A2 | **Implemented for Investigation** (`src/infrastructure/persistence`) behind a dedicated composition entrypoint, with path zones, a central allowlist and public type-surface verification. Awaiting Owner approval of A1 and A2 |
+| Atomic domain + audit + outbox, idempotency, optimistic concurrency                      | Decision 7, 8                    | Capability verified with test-only tables; workflows not implemented                                                                                                                                                            |
+| `drizzle-kit`                                                                            | Decision 9 (deferred)            | Not adopted                                                                                                                                                                                                                     |
+| Database integration tests and CI                                                        | Decision 10                      | `pnpm db:test` works locally; CI job belongs to S0-10, so local results are not an independently verified CI result                                                                                                             |
+| Reset safety                                                                             | Decision 11                      | Enforced in code with negative tests                                                                                                                                                                                            |
 
 Until the Engineering Owner approves ADR-025, none of the above is an approved decision.
 
@@ -196,3 +199,78 @@ Until the Engineering Owner approves ADR-025, none of the above is an approved d
 - Credentials in `docker-compose.yml` and `.env.example` are synthetic local values. The database is bound to loopback only.
 - No row-level security, roles per context, or production hardening (out of Sprint 0 scope).
 - The migration runner is intentionally small: forward-only, no down migrations, no per-file transaction opt-out.
+
+## 8. Investigation persistence path (S0-05) and what has been verified
+
+Path, with each hop owned by one layer:
+
+```text
+apps/api/src/composition/investigation.composition.ts   composition root (approved path)
+  -> @sdris/investigation/composition                    createInvestigationModule(PersistenceHandle): InvestigationModule
+  -> InvestigationService (src/application)              commands, rolls back on any failure
+  -> InvestigationRepository + TransactionScope ports    src/application/ports (no ORM types)
+  -> DrizzleInvestigationRepository (src/infrastructure) context-owned adapter; Drizzle stays here
+  -> PostgreSQL                                          migration 0002: investigation.uut, test_attempt, investigation_case, case_test_attempt_link
+```
+
+Storage rules in migration `0002_create_investigation_case_tables.sql` (the Engineering Owner's decisions Q2 to Q10,
+[approval record](../specs/S0-05-owner-approval.md)):
+
+- UUIDv7 primary keys generated by the application; `uut`, `test_attempt` and `investigation_case` reference `uut` by
+  foreign key (Q2).
+- Serial number, hostname and the external execution reference are optional, not unique, stored as given (Q3, Q4);
+  `stage` is limited to `IST`, `SAT` by a check constraint (Q4).
+- The case is the aggregate root and owns `case_test_attempt_link` rows. Its `version` column is the optimistic
+  concurrency token. `linkAttempt` requires `expectedVersion`: a stale version is a conflict even when the link exists, and a
+  new link is stored with the version increment by one atomic `UPDATE ... WHERE version = $n` (Q6).
+- The link key is `(case_id, attempt_id, role)`; the role is one of four values; several roles per pair and several
+  `INITIAL_FAILURE` links are allowed (Q5).
+- Same-UUT protection by the database: `unique (id, uut_id)` on case and attempt, and two composite foreign keys on the
+  link `(case_id, uut_id)` and `(attempt_id, uut_id)`.
+- Immutability: a trigger rejects `UPDATE` on `uut`, `test_attempt` and `case_test_attempt_link`.
+- Timestamps `created_at`, `registered_at`, `opened_at`, `linked_at` are `timestamptz` **without a default**: one injected
+  application clock supplies them (Q10), no command carries one, and the domain uses no database time function. SDRIS record
+  times, not external execution times and not audit history.
+- No status column, no lifecycle, no content rule on text, no uniqueness on external identifiers.
+
+Retrieval order (Q9) is explicit in SQL: `registered_at`, then `attempt_id`, then role order.
+The case and its links are loaded by **one** SQL statement, so the version and the links always come from the same snapshot
+(two statements could return a version older than the links under READ COMMITTED; found by Codex review of `f56c417`).
+
+Error codes the service returns as values are listed in section 12 of the
+[S0-05 specification](../specs/S0-05-investigation-aggregate-foundation.md).
+
+**Validation of the existing transaction design (before changing it).** `UnitOfWork` and `executorFor` were kept unchanged:
+callback-scoped, commit on resolve, rollback on reject, context invalid after exit. What was missing was a way to pass the
+database to a module without exposing it, so `PersistenceHandle` (no members) was added, with `createPersistenceHandle` for
+composition roots and `unitOfWorkOf` / `executorOf` for adapters. The application-facing transaction port is context-owned
+(`TransactionScope`); see ADR-025 Amendment A2.6. The repository never retries; a caller that gets a conflict re-reads and
+re-evaluates.
+
+**Verified against real PostgreSQL** (`pnpm db:test`; `apps/api/src/composition/investigation.integration.test.ts` and
+`investigation-links.integration.test.ts`, no mocks): UUT and attempt persistence (as given, duplicates allowed, check and
+foreign keys, immutability triggers); case persistence; linking with version increment; idempotent repeat with no version
+increment and no overwrite; several roles and several `INITIAL_FAILURE` links; many-to-many; deterministic retrieval order
+with a scrambled insertion order and equal `registered_at`; same-UUT rejection in the domain and, separately, by both
+composite foreign keys; unique `(case_id, attempt_id, role)`; commit of version bump and link together; rollback on a
+domain error and on a database failure injected after the version bump; simultaneous writers; a deterministic stale-writer
+case (a row lock holds the writer between reading and saving, another writer advances the version, the stale writer must
+get a conflict and store nothing); retrying writers losing no update; a duplicate that loses a race becoming an idempotent
+no-op on retry. These are local results; there is no CI yet (S0-10).
+
+**Mutation findings.** Each of these turns the suite red: dropping the role order, dropping `registered_at` from the order,
+dropping the version predicate, making a duplicate write (service and domain), removing the domain UUT check, dropping the
+attempt-side composite foreign key, dropping the link immutability trigger, dropping the role check, narrowing the link key
+to `(case_id, attempt_id)`.
+
+## 9. Compiled runtime (ADR-025 A4) and test-only entrypoints (A3)
+
+Workspace packages used by the composed API build to `dist/` and publish `{ sdris-source, types, default }` entrypoints, so
+plain Node runs compiled JavaScript while repository tooling keeps using source. `pnpm test:runtime` proves it: it deletes
+the `dist` directories, builds `@sdris/api` and its dependencies in dependency order, checks that TypeScript consumers resolve
+`dist/*.d.ts` and plain Node resolves `dist/*.js`, and runs the compiled `apps/api` composition root in a `node` process with
+no tsx against real PostgreSQL (commit, rollback, cross-UUT rejection in the domain and the database, a deterministic
+stale-writer conflict, no TypeScript or tsx module loaded).
+
+`@sdris/database/testing` is a test-only entrypoint: only recognised test files may import it or anything in its directory
+(`dependency/test-only-entrypoint`). Local run only; there is still no CI (S0-10).

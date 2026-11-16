@@ -1,8 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { extractImports } from './imports.mjs';
+import { extractImports, extractLocalReexports } from './imports.mjs';
 import { resolveAlias, resolveFile } from './resolve.mjs';
-import { isTestFile, listSourceFiles, loadWorkspace, ownerOf, toPosix } from './workspace.mjs';
+import {
+  isTestFile,
+  listSourceFiles,
+  loadWorkspace,
+  ownerOf,
+  toPosix,
+  zoneOf,
+} from './workspace.mjs';
 
 /**
  * Layer dependency policy. A layer may import only the listed layers (always via the target
@@ -38,9 +45,131 @@ const KERNEL_FORBIDDEN_EXTERNALS = [
 /** Layers that hold domain logic or public contracts and so must stay persistence-independent. */
 const PERSISTENCE_FREE_LAYERS = new Set(['kernel', 'contracts', 'config', 'module', 'testing']);
 
-function loadMatrix(matrixPath) {
-  if (!matrixPath || !existsSync(matrixPath)) return {};
-  return JSON.parse(readFileSync(matrixPath, 'utf8')).moduleDependencies ?? {};
+/** Zones of a module package in which persistence libraries may be used (Context Infrastructure). */
+const CONTEXT_INFRASTRUCTURE_ZONE = 'infrastructure';
+const COMPOSITION_ZONE = 'composition';
+/** The one additional package entrypoint a module may publish, and the only file it may map to. */
+const COMPOSITION_SUBPATH = './composition';
+
+const isInside = (file, dir) => file === dir || file.startsWith(dir + path.sep);
+
+const matchesPath = (pattern, file) =>
+  pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file === pattern;
+
+const npmPackageName = (specifier) =>
+  specifier.startsWith('@') ? specifier.split('/').slice(0, 2).join('/') : specifier.split('/')[0];
+const isPersistenceExternal = (specifier) => PERSISTENCE_EXTERNALS.some((re) => re.test(specifier));
+
+/**
+ * The centralised, explicit dependency policy file (PROPOSED). `moduleDependencies` lists approved
+ * module-to-module edges. `contextInfrastructure` lists, per module, the Global Infrastructure workspace
+ * packages and the persistence npm packages that module's `src/infrastructure/**` may use. Everything
+ * not listed is denied. Source-path restrictions (zones) always apply on top of the list.
+ */
+function loadPolicy(matrixPath) {
+  if (!matrixPath || !existsSync(matrixPath))
+    return {
+      moduleDependencies: {},
+      contextInfrastructure: {},
+      compositionRoots: {},
+      testOnlyEntrypoints: {},
+    };
+  const raw = JSON.parse(readFileSync(matrixPath, 'utf8'));
+  return {
+    moduleDependencies: raw.moduleDependencies ?? {},
+    contextInfrastructure: raw.contextInfrastructure ?? {},
+    compositionRoots: raw.compositionRoots ?? {},
+    testOnlyEntrypoints: raw.testOnlyEntrypoints ?? {},
+  };
+}
+
+/** Rejects a malformed allowlist so a typo cannot silently grant or deny access. Throws (exit 2). */
+function validatePolicy(policy, packages) {
+  const fail = (message) => {
+    throw new Error(`invalid dependency policy: ${message}`);
+  };
+  const isStringArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string');
+  for (const [name, entry] of Object.entries(policy.contextInfrastructure)) {
+    const owner = packages.find((p) => p.name === name);
+    if (!owner || owner.layer !== 'module')
+      fail(`contextInfrastructure key "${name}" is not a module package`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      fail(`contextInfrastructure["${name}"] must be an object`);
+    for (const key of Object.keys(entry)) {
+      if (key !== 'workspacePackages' && key !== 'externalPackages')
+        fail(`contextInfrastructure["${name}"] has unknown property "${key}"`);
+      if (!isStringArray(entry[key]))
+        fail(`contextInfrastructure["${name}"].${key} must be a string array`);
+    }
+    for (const dep of entry.workspacePackages ?? []) {
+      const target = packages.find((p) => p.name === dep);
+      if (!target || target.layer !== 'infrastructure')
+        fail(
+          `"${dep}" (allowed for ${name}) is not a Global Infrastructure package under infrastructure/*`,
+        );
+    }
+    for (const dep of entry.externalPackages ?? []) {
+      if (!isPersistenceExternal(dep))
+        fail(
+          `"${dep}" (allowed for ${name}) is not a recognised persistence package; nothing to allow`,
+        );
+    }
+  }
+  for (const [name, entry] of Object.entries(policy.compositionRoots)) {
+    const owner = packages.find((p) => p.name === name);
+    if (!owner || owner.layer !== 'module')
+      fail(`compositionRoots key "${name}" is not a module package`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      fail(`compositionRoots["${name}"] must be an object`);
+    for (const key of Object.keys(entry)) {
+      if (key !== 'packages' && key !== 'paths')
+        fail(`compositionRoots["${name}"] has unknown property "${key}"`);
+    }
+    if (!isStringArray(entry.packages) || entry.packages.length === 0)
+      fail(`compositionRoots["${name}"].packages must be a non-empty string array`);
+    if (!isStringArray(entry.paths) || entry.paths.length === 0)
+      fail(`compositionRoots["${name}"].paths must be a non-empty string array`);
+    for (const dep of entry.packages) {
+      const root = packages.find((p) => p.name === dep);
+      if (!root || root.layer !== 'app')
+        fail(`"${dep}" (composition root for ${name}) is not an application package under apps/*`);
+    }
+    for (const pattern of entry.paths) {
+      const inside = entry.packages.some((dep) =>
+        pattern.startsWith(`${packages.find((p) => p.name === dep).relDir}/`),
+      );
+      if (!inside || !/^[^*]+(\/\*\*)?$/.test(pattern))
+        fail(
+          `compositionRoots["${name}"] path "${pattern}" must be a path inside a listed app, optionally ending in /**`,
+        );
+    }
+  }
+  for (const [name, entry] of Object.entries(policy.testOnlyEntrypoints)) {
+    const owner = packages.find((p) => p.name === name);
+    if (!owner) fail(`testOnlyEntrypoints key "${name}" is not a workspace package`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      fail(`testOnlyEntrypoints["${name}"] must be an object`);
+    for (const key of Object.keys(entry)) {
+      if (key !== 'subpaths' && key !== 'approvedPaths')
+        fail(`testOnlyEntrypoints["${name}"] has unknown property "${key}"`);
+    }
+    if (!isStringArray(entry.subpaths) || entry.subpaths.length === 0)
+      fail(`testOnlyEntrypoints["${name}"].subpaths must be a non-empty string array`);
+    for (const subpath of entry.subpaths) {
+      if (subpath === '.')
+        fail(`testOnlyEntrypoints["${name}"] cannot make the root entrypoint test-only`);
+      if (!owner.entries.has(subpath))
+        fail(`testOnlyEntrypoints["${name}"] names "${subpath}", which ${name} does not export`);
+    }
+    if (entry.approvedPaths !== undefined && !isStringArray(entry.approvedPaths))
+      fail(`testOnlyEntrypoints["${name}"].approvedPaths must be a string array`);
+    for (const pattern of entry.approvedPaths ?? []) {
+      if (!/^[^*]+(\/\*\*)?$/.test(pattern))
+        fail(
+          `testOnlyEntrypoints["${name}"] approved path "${pattern}" must be a path, optionally ending in /**`,
+        );
+    }
+  }
 }
 
 /**
@@ -55,7 +184,25 @@ export function checkArchitecture({ root, matrixPath } = {}) {
       `no workspace packages found under ${root} (expected apps/*, modules/*, packages/*, infrastructure/*)`,
     );
   }
-  const matrix = loadMatrix(matrixPath);
+  const policy = loadPolicy(matrixPath);
+  validatePolicy(policy, packages);
+  // A test-only entrypoint protects its whole directory, so production code cannot reach the helpers
+  // behind the entry either, whether from another package or from elsewhere in the same package.
+  const testOnlyZones = [];
+  for (const [name, entry] of Object.entries(policy.testOnlyEntrypoints)) {
+    const owner = packages.find((p) => p.name === name);
+    for (const subpath of entry.subpaths) {
+      for (const file of owner.entries.get(subpath)) {
+        testOnlyZones.push({
+          owner,
+          subpath,
+          dir: path.dirname(file),
+          approvedPaths: entry.approvedPaths ?? [],
+        });
+      }
+    }
+  }
+  const matrix = policy.moduleDependencies;
   const byName = new Map(packages.map((p) => [p.name, p]));
   const violations = [];
   const notes = [];
@@ -76,6 +223,11 @@ export function checkArchitecture({ root, matrixPath } = {}) {
         { hint: 'Add it to the layer policy via an ADR; do not guess its permissions.' },
       );
     }
+    for (const issue of pkg.conditionIssues) {
+      violate('package/exports-condition', manifestFile, 1, `${pkg.name} exports ${issue}.`, {
+        hint: 'Write each entrypoint as { "sdris-source": "./src/...", "types": "./dist/....d.ts", "default": "./dist/....js" } with dist mirroring src.',
+      });
+    }
     for (const pattern of pkg.unsupportedPatterns) {
       violate(
         'package/unsupported-exports-pattern',
@@ -87,15 +239,32 @@ export function checkArchitecture({ root, matrixPath } = {}) {
     }
     if (pkg.layer === 'module') {
       const publicDir = path.join(pkg.dir, 'src', 'public') + path.sep;
-      for (const file of pkg.entryFiles) {
-        if (!file.startsWith(publicDir)) {
-          violate(
-            'package/entrypoint-location',
-            manifestFile,
-            1,
-            `${pkg.name} publishes ${rel(file)}, which is outside src/public/.`,
-            { hint: 'Module entrypoints must live in src/public/ (AGENTS.md section 5).' },
-          );
+      const compositionEntry = path.join(pkg.dir, 'src', 'composition', 'index.ts');
+      for (const [subpath, files] of pkg.entries) {
+        for (const file of files) {
+          if (subpath === COMPOSITION_SUBPATH) {
+            if (file !== compositionEntry) {
+              violate(
+                'package/entrypoint-location',
+                manifestFile,
+                1,
+                `${pkg.name} maps "${COMPOSITION_SUBPATH}" to ${rel(file)}; it must be src/composition/index.ts.`,
+                {
+                  hint: 'The composition entrypoint is the single additional entrypoint a module may publish.',
+                },
+              );
+            }
+          } else if (!file.startsWith(publicDir)) {
+            violate(
+              'package/entrypoint-location',
+              manifestFile,
+              1,
+              `${pkg.name} publishes ${rel(file)} as "${subpath}", which is outside src/public/.`,
+              {
+                hint: `Module entrypoints must live in src/public/ (AGENTS.md section 5); the only exception is "${COMPOSITION_SUBPATH}" -> src/composition/index.ts.`,
+              },
+            );
+          }
         }
       }
     }
@@ -104,7 +273,10 @@ export function checkArchitecture({ root, matrixPath } = {}) {
       for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
         for (const dep of Object.keys(pkg.manifest[field] ?? {})) {
           const internal = pkg.layer === 'kernel' && dep.startsWith('@sdris/');
-          if (internal || forbidden.some((re) => re.test(dep))) {
+          const allowlisted =
+            pkg.layer === 'module' &&
+            (policy.contextInfrastructure[pkg.name]?.externalPackages ?? []).includes(dep);
+          if (!allowlisted && (internal || forbidden.some((re) => re.test(dep)))) {
             violate(
               'dependency/manifest',
               manifestFile,
@@ -112,6 +284,27 @@ export function checkArchitecture({ root, matrixPath } = {}) {
               pkg.layer === 'kernel'
                 ? `Shared Kernel must not declare ${field}.${dep}.`
                 : `${pkg.name} (${pkg.layer}) must stay persistence-independent; it declares ${field}.${dep}.`,
+              {
+                from: pkg.name,
+                to: dep,
+                hint:
+                  pkg.layer === 'module'
+                    ? 'Add it to contextInfrastructure in the dependency policy (needs an ADR); do not edit around the check.'
+                    : undefined,
+              },
+            );
+          }
+          const depPackage = byName.get(dep);
+          if (
+            pkg.layer === 'module' &&
+            depPackage?.layer === 'infrastructure' &&
+            !(policy.contextInfrastructure[pkg.name]?.workspacePackages ?? []).includes(dep)
+          ) {
+            violate(
+              'dependency/manifest',
+              manifestFile,
+              1,
+              `${pkg.name} declares ${field}.${dep} (Global Infrastructure) but is not in the context-infrastructure allowlist.`,
               { from: pkg.name, to: dep },
             );
           }
@@ -133,6 +326,30 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           message: `Non-literal ${u.kind} cannot be analysed.`,
         });
       }
+      if (pkg.layer === 'module' && zoneOf(pkg, file) === COMPOSITION_ZONE) {
+        for (const local of extractLocalReexports(readFileSync(file, 'utf8'), file)) {
+          const t = classify(
+            { pkg, file, imp: { specifier: local.specifier }, root },
+            packages,
+            byName,
+          );
+          const exposesInfrastructure =
+            (t.external && isPersistenceExternal(local.specifier)) ||
+            t.owner?.layer === 'infrastructure' ||
+            (t.owner === pkg &&
+              t.resolvedFile !== undefined &&
+              zoneOf(pkg, t.resolvedFile, { ignoreCase: true }) === CONTEXT_INFRASTRUCTURE_ZONE);
+          if (exposesInfrastructure) {
+            violate(
+              'composition/adapter-exposure',
+              rel(file),
+              local.line,
+              `src/composition exports "${local.name}", imported from "${local.specifier}"; composition exposes factories and contracts, never adapters or infrastructure.`,
+              { specifier: local.specifier, from: pkg.name },
+            );
+          }
+        }
+      }
       for (const imp of imports) {
         const ctx = { pkg, file, imp, root };
         const target = classify(ctx, packages, byName);
@@ -151,19 +368,29 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           } else if (
             pkg.layer !== 'kernel' &&
             PERSISTENCE_FREE_LAYERS.has(pkg.layer) &&
-            PERSISTENCE_EXTERNALS.some((re) => re.test(imp.specifier))
+            isPersistenceExternal(imp.specifier)
           ) {
-            violate(
-              'dependency/forbidden-external',
-              rel(file),
-              imp.line,
-              `${pkg.name} (${pkg.layer}) must stay persistence-independent; it imports "${imp.specifier}".`,
-              {
-                specifier: imp.specifier,
-                from: pkg.name,
-                hint: 'ORM, query-builder and driver code belongs in infrastructure/* adapters behind a port.',
-              },
-            );
+            const zone = pkg.layer === 'module' ? zoneOf(pkg, file) : undefined;
+            const allowed =
+              zone === CONTEXT_INFRASTRUCTURE_ZONE &&
+              (policy.contextInfrastructure[pkg.name]?.externalPackages ?? []).includes(
+                npmPackageName(imp.specifier),
+              );
+            if (!allowed) {
+              violate(
+                'dependency/forbidden-external',
+                rel(file),
+                imp.line,
+                pkg.layer === 'module'
+                  ? `${pkg.name} may use "${imp.specifier}" only from src/infrastructure/** and only if allowlisted; this file is in zone "${zone}"${zone === CONTEXT_INFRASTRUCTURE_ZONE ? ' and the package is not allowlisted' : ''}.`
+                  : `${pkg.name} (${pkg.layer}) must stay persistence-independent; it imports "${imp.specifier}".`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'ORM, query-builder and driver code belongs in Context Infrastructure (modules/<context>/src/infrastructure/**, allowlisted) or Global Infrastructure (infrastructure/*), behind a port.',
+                },
+              );
+            }
           }
           continue;
         }
@@ -177,9 +404,128 @@ export function checkArchitecture({ root, matrixPath } = {}) {
           if (target.owner) edges.push(edge(pkg, target.owner, file, imp, rel));
           continue;
         }
-        if (target.owner === pkg) continue;
+        if (target.resolvedFile !== undefined) {
+          const zone = testOnlyZones.find(
+            (z) => z.owner === target.owner && isInside(target.resolvedFile, z.dir),
+          );
+          if (
+            zone &&
+            !isInside(file, zone.dir) &&
+            !isTestFile(file) &&
+            !zone.approvedPaths.some((pattern) => matchesPath(pattern, rel(file)))
+          ) {
+            violate(
+              'dependency/test-only-entrypoint',
+              rel(file),
+              imp.line,
+              `${rel(file)} is not a test file or approved test infrastructure, but imports "${imp.specifier}", a test-only entrypoint of ${zone.owner.name} (${zone.subpath}).`,
+              {
+                specifier: imp.specifier,
+                from: pkg.name,
+                to: zone.owner.name,
+                hint: 'Only recognised test files (*.test.ts, *.spec.ts, __tests__/) and the approvedPaths listed in testOnlyEntrypoints may use it.',
+              },
+            );
+          }
+        }
+        if (target.compositionEntry && target.owner !== pkg) {
+          const roots = policy.compositionRoots[target.owner.name];
+          const approved =
+            roots !== undefined &&
+            roots.packages.includes(pkg.name) &&
+            roots.paths.some((pattern) => matchesPath(pattern, rel(file)));
+          if (!approved) {
+            edges.push(edge(pkg, target.owner, file, imp, rel));
+            violate(
+              'dependency/composition-access',
+              rel(file),
+              imp.line,
+              `${rel(file)} is not an approved composition root for ${target.owner.name}; only listed application paths may import "${imp.specifier}".`,
+              {
+                specifier: imp.specifier,
+                from: pkg.name,
+                to: target.owner.name,
+                hint: 'Add the application path to compositionRoots in the dependency policy (needs an ADR).',
+              },
+            );
+            continue;
+          }
+        }
+        if (target.owner === pkg) {
+          if (pkg.layer === 'module' && target.resolvedFile !== undefined) {
+            const from = zoneOf(pkg, file);
+            const into = zoneOf(pkg, target.resolvedFile, { ignoreCase: true });
+            const who = from === 'other' ? 'Code outside the named zones' : `${from} code`;
+            if (
+              into === CONTEXT_INFRASTRUCTURE_ZONE &&
+              from !== CONTEXT_INFRASTRUCTURE_ZONE &&
+              from !== COMPOSITION_ZONE
+            ) {
+              violate(
+                'boundary/infrastructure-inversion',
+                rel(file),
+                imp.line,
+                `${who} in ${pkg.name} imports its own Context Infrastructure (${rel(target.resolvedFile)}); only src/infrastructure/** and src/composition/** may.`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'Depend on a port in src/application and let the adapter implement it; a barrel elsewhere cannot re-export infrastructure.',
+                },
+              );
+            }
+            if (into === COMPOSITION_ZONE && from !== COMPOSITION_ZONE) {
+              violate(
+                'boundary/composition-inversion',
+                rel(file),
+                imp.line,
+                `${who} in ${pkg.name} imports its own composition zone (${rel(target.resolvedFile)}); only src/composition/** may.`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'The composition entrypoint is consumed by approved application composition roots, never by the module itself.',
+                },
+              );
+            }
+            if (
+              from === COMPOSITION_ZONE &&
+              imp.kind === 're-export' &&
+              into === CONTEXT_INFRASTRUCTURE_ZONE
+            ) {
+              violate(
+                'composition/adapter-exposure',
+                rel(file),
+                imp.line,
+                `src/composition re-exports Context Infrastructure (${rel(target.resolvedFile)}); composition exposes factories and contracts, never adapters.`,
+                { specifier: imp.specifier, from: pkg.name },
+              );
+            }
+          }
+          continue;
+        }
         edges.push(edge(pkg, target.owner, file, imp, rel));
-        const denial = directionDenial(pkg, target.owner, isTestFile(file), matrix);
+        if (
+          pkg.layer === 'module' &&
+          zoneOf(pkg, file) === COMPOSITION_ZONE &&
+          imp.kind === 're-export' &&
+          target.owner.layer === 'infrastructure'
+        ) {
+          violate(
+            'composition/adapter-exposure',
+            rel(file),
+            imp.line,
+            `src/composition re-exports ${target.owner.name}; composition exposes factories and contracts, never infrastructure.`,
+            { specifier: imp.specifier, from: pkg.name },
+          );
+        }
+        const denial = directionDenial(
+          pkg,
+          target.owner,
+          isTestFile(file),
+          matrix,
+          policy,
+          zoneOf(pkg, file),
+          imp.typeOnly,
+        );
         if (denial) {
           violate('dependency/direction', rel(file), imp.line, denial, {
             specifier: imp.specifier,
@@ -218,7 +564,15 @@ export function checkArchitecture({ root, matrixPath } = {}) {
   return {
     violations,
     notes,
-    stats: { packages: packages.length, files: filesScanned, imports: edges.length },
+    stats: {
+      packages: packages.length,
+      files: filesScanned,
+      imports: edges.length,
+      edges: [...new Set(edges.map((e) => `${e.from}\u0000${e.to}`))].map((key) => {
+        const [from, to] = key.split('\u0000');
+        return { from, to };
+      }),
+    },
   };
 }
 
@@ -258,6 +612,19 @@ function classify({ pkg, file, imp, root }, packages, byName) {
       };
     }
     const subpath = rest.length === 0 ? '.' : `./${rest.join('/')}`;
+    if (owner === pkg) {
+      // A module importing itself by package name must be judged like a relative or alias import: resolve
+      // the file so the zone rules (infrastructure and composition inversion) apply. A published subpath
+      // resolves to its entry file; anything else is read as a path inside the package, as a self-reference
+      // would be.
+      const published = owner.entries.get(subpath);
+      const abs = published ? [...published][0] : path.join(owner.dir, ...rest);
+      return {
+        owner,
+        resolvedFile: resolveFile(abs) ?? abs,
+        compositionEntry: subpath === COMPOSITION_SUBPATH,
+      };
+    }
     if (owner !== pkg && !owner.entries.has(subpath)) {
       return {
         owner,
@@ -268,7 +635,11 @@ function classify({ pkg, file, imp, root }, packages, byName) {
         },
       };
     }
-    return { owner };
+    return {
+      owner,
+      compositionEntry: subpath === COMPOSITION_SUBPATH,
+      resolvedFile: [...(owner.entries.get(subpath) ?? [])][0],
+    };
   }
 
   const owner = ownerOf(packages, abs);
@@ -280,7 +651,7 @@ function classify({ pkg, file, imp, root }, packages, byName) {
       },
     };
   }
-  if (owner === pkg) return { owner };
+  if (owner === pkg) return { owner, resolvedFile: resolveFile(abs) ?? abs };
 
   // Compare the one file the import actually resolves to. An unresolvable target is not published.
   const resolvedFile = resolveFile(abs);
@@ -306,11 +677,39 @@ function classify({ pkg, file, imp, root }, packages, byName) {
       },
     };
   }
-  return { owner };
+  return {
+    owner,
+    resolvedFile,
+    compositionEntry: resolvedFile !== undefined && owner.compositionFiles.has(resolvedFile),
+  };
 }
 
-function directionDenial(from, to, testFile, matrix) {
+function directionDenial(from, to, testFile, matrix, policy, zone, typeOnly) {
   if (from.layer === undefined || to.layer === undefined) return undefined; // reported elsewhere
+  if (from.layer === 'module' && to.layer === 'infrastructure') {
+    // Context Infrastructure (any import) or the composition zone (type-only imports): a source-path
+    // restriction plus the explicit allowlist.
+    const listed = (policy.contextInfrastructure[from.name]?.workspacePackages ?? []).includes(
+      to.name,
+    );
+    if (zone === COMPOSITION_ZONE) {
+      if (!typeOnly) {
+        return `src/composition of ${from.name} may only import types from ${to.name} (Global Infrastructure); a runtime import is forbidden. Use "import type".`;
+      }
+      return listed
+        ? undefined
+        : `${to.name} (Global Infrastructure) is not in the context-infrastructure allowlist for ${from.name}.`;
+    }
+    if (zone !== CONTEXT_INFRASTRUCTURE_ZONE) {
+      return `${from.name} code outside src/infrastructure/** (zone "${zone}") may not depend on Global Infrastructure (${to.name}).`;
+    }
+    return (policy.contextInfrastructure[from.name]?.workspacePackages ?? []).includes(to.name)
+      ? undefined
+      : `${to.name} (Global Infrastructure) is not in the context-infrastructure allowlist for ${from.name}.`;
+  }
+  if (from.layer === 'infrastructure' && to.layer === 'module') {
+    return `Global Infrastructure (${from.name}) may not import business module ${to.name}; there is no default exception.`;
+  }
   if (from.layer === 'module' && to.layer === 'module') {
     return (matrix[from.name] ?? []).includes(to.name)
       ? undefined

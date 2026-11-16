@@ -30,3 +30,11 @@ export type { SchemaName } from './schemas';
 export { SCHEMA_OWNERSHIP, SCHEMA_NAMES } from './schemas';
 export type { TransactionContext, UnitOfWork } from './unit-of-work';
 export { TransactionContextError, createUnitOfWork, executorFor } from './unit-of-work';
+
+export type { PersistenceHandle } from './persistence-handle';
+export {
+  UnknownPersistenceHandleError,
+  createPersistenceHandle,
+  unitOfWorkOf,
+  executorOf,
+} from './persistence-handle';

@@ -1,0 +1,12 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/infrastructure/persistence/repo.ts"
+    },
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/infrastructure/persistence/repo.ts"
+    }
+  ]
+}

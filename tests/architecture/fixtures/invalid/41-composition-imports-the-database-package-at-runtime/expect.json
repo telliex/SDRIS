@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/direction",
+      "file": "modules/investigation/src/composition/index.ts"
+    }
+  ],
+  "messageIncludes": "may only import types"
+}

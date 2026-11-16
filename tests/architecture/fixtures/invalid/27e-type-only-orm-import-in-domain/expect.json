@@ -1,0 +1,8 @@
+{
+  "violations": [
+    {
+      "rule": "dependency/forbidden-external",
+      "file": "modules/investigation/src/domain/t.ts"
+    }
+  ]
+}
