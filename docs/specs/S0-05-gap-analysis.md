@@ -66,20 +66,20 @@ first. It invents no lifecycle rule, validation limit or identity-normalisation 
 
 ## 5. Runtime and test requirements (spec section 8) and acceptance criteria (section 10)
 
-| Item                                                                  | State                                                                                      |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Domain unit tests                                                     | Exist for the current model only                                                           |
-| Architecture boundary tests                                           | Pass (A1/A2 fixtures including 29f/29g and 51-51f)                                         |
-| PostgreSQL integration tests                                          | Pass for the current model                                                                 |
-| Cross-UUT rejection tests                                             | Pass for observations; links absent                                                        |
-| Optimistic concurrency, transaction commit and rollback               | Pass for the case                                                                          |
-| Composition-root integration tests                                    | Pass                                                                                       |
-| Public API type-surface checks                                        | Pass                                                                                       |
-| **Pure Node.js compiled-runtime smoke test**                          | **Missing** (acceptance 7). Work started under Step 3, independent of the domain questions |
-| **Test-only database entrypoint restriction**                         | **Missing** (acceptance 8). Work started under Step 2, independent of the domain questions |
-| Acceptance 1, 2, 3 (all four concepts, many-to-many, cross-UUT links) | **Not met**: UUT, TestAttempt and link are missing                                         |
-| Acceptance 4, 5, 6                                                    | Met for the current model; to be re-shown for the full model                               |
-| Acceptance 10, 11, 12                                                 | ADR documented; Codex review and Owner acceptance pending                                  |
+| Item                                                                  | State                                                                                                  |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Domain unit tests                                                     | Exist for the current model only                                                                       |
+| Architecture boundary tests                                           | Pass (A1/A2 fixtures including 29f/29g and 51-51f)                                                     |
+| PostgreSQL integration tests                                          | Pass for the current model                                                                             |
+| Cross-UUT rejection tests                                             | Pass for observations; links absent                                                                    |
+| Optimistic concurrency, transaction commit and rollback               | Pass for the case                                                                                      |
+| Composition-root integration tests                                    | Pass                                                                                                   |
+| Public API type-surface checks                                        | Pass                                                                                                   |
+| **Pure Node.js compiled-runtime smoke test**                          | **Implemented** (acceptance 7): `pnpm test:runtime`, ADR-025 A4. Independent of the domain questions   |
+| **Test-only database entrypoint restriction**                         | **Implemented** (acceptance 8): `testOnlyEntrypoints`, ADR-025 A3. Independent of the domain questions |
+| Acceptance 1, 2, 3 (all four concepts, many-to-many, cross-UUT links) | **Not met**: UUT, TestAttempt and link are missing                                                     |
+| Acceptance 4, 5, 6                                                    | Met for the current model; to be re-shown for the full model                                           |
+| Acceptance 10, 11, 12                                                 | ADR documented; Codex review and Owner acceptance pending                                              |
 
 ## 6. Questions for the Engineering Owner
 

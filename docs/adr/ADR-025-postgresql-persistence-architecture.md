@@ -6,7 +6,7 @@
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
 - **Related:** ADR-024, AGENTS.md, CLAUDE.md
 - **Implementation Reference:** PR #5 — S0-04 PostgreSQL & Migration Baseline
-- **Proposed amendments:** A1 — S0-05 persistence dependency policy; A2 — dedicated composition entry point (revises A1 Rule 3). Both are below. **PROPOSED, pending Engineering Owner approval.**
+- **Proposed amendments:** A1 — S0-05 persistence dependency policy; A2 — dedicated composition entry point (revises A1 Rule 3); A3 — test-only entrypoints; A4 — compiled runtime packaging. All are below. **PROPOSED, pending Engineering Owner approval.**
 
 ## 1. Context
 
@@ -707,6 +707,46 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 - The Investigation aggregate itself: the S0-05 specification is not committed; the minimal aggregate in this change has no
   status, no lifecycle and no content rules for descriptions (no trimming, length limit or emptiness rule), and is only a
   vehicle for verifying the persistence path.
+
+## Proposed Amendment A3 — Test-Only Entrypoints
+
+- **Status:** PROPOSED — Pending Engineering Owner Approval. Not in force until approved in writing.
+- **Resolves:** `@sdris/database/testing` was exported from a production package with nothing stopping production code
+  from importing it (found in review of PR #6; confirmed by experiment).
+- **Rules:**
+  1. The central policy `dependency-matrix.json` lists `testOnlyEntrypoints`: per package, exported subpaths that only
+     recognised test files may import. Initially only `@sdris/database` `./testing`.
+  2. A recognised test file is `*.test.*`, `*.spec.*` or any file under `__tests__/`. Further non-test infrastructure must be
+     listed explicitly in `approvedPaths` (empty today). A file merely containing the word "test" in its name or directory is
+     not a test file.
+  3. The protection covers the entrypoint **and the directory behind it**, so production code cannot reach the helpers by
+     another route. It applies to package-name imports, subpaths, tsconfig aliases, re-exports, dynamic `import()`,
+     `require()`, type-only imports, relative paths, and self-references from inside the owning package. Controllers,
+     services and composition roots are production code.
+  4. Files inside the protected directory may use each other. No separate testing workspace package is introduced.
+- **Enforcement:** `dependency/test-only-entrypoint`; a malformed policy exits with code 2.
+- **Limitation:** "recognised test file" is a naming convention, so a production file named `*.test.ts` would pass.
+
+## Proposed Amendment A4 — Compiled Runtime Packaging
+
+- **Status:** PROPOSED — Pending Engineering Owner Approval. Not in force until approved in writing.
+- **Resolves:** the composed API could only run under `tsx` because workspace packages resolved to TypeScript sources.
+  The S0-05 specification requires compiled composition code to run under supported Node.js without tsx.
+- **Decision (smallest change that works):**
+  1. `shared-kernel`, `database` and `investigation` build independently with `tsc -p tsconfig.build.json` into `dist/`
+     (JavaScript and declarations). Test-only spike helpers are not shipped.
+  2. Every published entrypoint is written `{ "sdris-source": "./src/...ts", "types": "./dist/....d.ts", "default": "./dist/....js" }`.
+     Plain Node and TypeScript consumers outside the repository follow `default` and `types`. Repository tests and NodeNext
+     type checks use the `sdris-source` condition and need no prior build.
+  3. `main`, `types`, `typesVersions`, the package boundaries and the set of entrypoints are **unchanged**.
+- **Guard:** the checker judges the source target and requires `types` and `default` to be its exact dist mirror, and rejects
+  other conditions, so a compiled private file cannot silently become the public entrypoint (`package/exports-condition`).
+- **Verification (not a TypeScript build alone):** `pnpm test:runtime` builds from a clean state, then runs the compiled
+  `apps/api` composition root in a plain `node` process (no tsx, no loader flags, no custom conditions) against real
+  PostgreSQL and asserts that no TypeScript source or tsx module was loaded.
+- **Trade-offs and limits:** each package needs a build before it can run outside `tsx`; the `sdris-source` condition must be
+  passed to `tsx` and set as `customConditions` wherever source resolution is wanted; the API itself is still started by `tsx`
+  in development. No bundling and no publish pipeline are introduced.
 
 ## 18. Acceptance and Change Control
 

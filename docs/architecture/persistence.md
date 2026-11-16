@@ -235,3 +235,15 @@ and, separately, by the composite foreign key. These are local results; there is
 **Mutation findings.** Removing the version predicate, ignoring the transaction in the adapter, re-inserting existing
 observations, accepting a duplicate case id, and removing both the domain UUT check and the foreign key each turn the suite
 red. Removing only the domain UUT check does not, by design: the database foreign key still rejects the observation.
+
+## 9. Compiled runtime (ADR-025 A4) and test-only entrypoints (A3)
+
+Workspace packages used by the composed API build to `dist/` and publish `{ sdris-source, types, default }` entrypoints, so
+plain Node runs compiled JavaScript while repository tooling keeps using source. `pnpm test:runtime` proves it: it deletes
+the `dist` directories, builds `@sdris/api` and its dependencies in dependency order, checks that TypeScript consumers resolve
+`dist/*.d.ts` and plain Node resolves `dist/*.js`, and runs the compiled `apps/api` composition root in a `node` process with
+no tsx against real PostgreSQL (commit, rollback, cross-UUT rejection in the domain and the database, a deterministic
+stale-writer conflict, no TypeScript or tsx module loaded).
+
+`@sdris/database/testing` is a test-only entrypoint: only recognised test files may import it or anything in its directory
+(`dependency/test-only-entrypoint`). Local run only; there is still no CI (S0-10).
