@@ -41,6 +41,35 @@ checksum (see [the persistence policy](S0-05-proposed-persistence-policy.md) sec
 
 ---
 
+## Traceability: decision, implementation, evidence
+
+Verification of the specification against the decision record (Q1). Test names are in
+`modules/investigation/src/**/*.spec.ts` (unit), `apps/api/src/composition/investigation*.integration.test.ts` (real
+PostgreSQL) and `tests/runtime/` (compiled, plain Node).
+
+| Decision                                                 | Implementation                                                                 | Evidence                                                                                                    |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Q2 Investigation owns UUT; case and attempt use FKs      | `investigation.uut`; FKs on `test_attempt.uut_id`, `investigation_case.uut_id` | "is also enforced by the database: stage vocabulary, UUT foreign keys"; unknown UUT for attempt and case    |
+| Q3 SN and hostname optional, not unique, as supplied     | nullable columns, no unique index, no checks                                   | unit "stores serial number and hostname exactly as supplied"; integration "as supplied, duplicates allowed" |
+| Q4 stage `IST`/`SAT`; optional, non-unique execution ref | `parseTestStage`, `check (stage in ...)`, nullable reference                   | unit "accepts exactly the controlled vocabulary"; "rejects anything outside"; integration invalid stage     |
+| Q4 no result field; immutable                            | no result column; update trigger                                               | unit "has no result field"; integration "keeps UUT, attempt and link rows immutable"                        |
+| Q5 roles, same UUT, key `(case, attempt, role)`          | `LINK_ROLES`, composite FKs, primary key                                       | unit link specs; integration "enforces unique (case_id, attempt_id, role)"                                  |
+| Q5 several roles per pair, several `INITIAL_FAILURE`     | no narrower key, no cardinality rule                                           | unit and integration "permits several roles ... several INITIAL_FAILURE links"                              |
+| Q5 idempotent duplicate; roles immutable                 | `linkTestAttempt` returns `created: false`; update trigger                     | unit "is idempotent"; integration "is idempotent: an identical repeat changes nothing"                      |
+| Q5 cross-UUT rejected in application and database        | domain check; `uut_mismatch`; two composite FKs                                | unit "refuses an attempt of another UUT"; integration forged-link test with three mismatches                |
+| Q6 link inside case aggregate; version bump rules        | `save` bumps the version once; duplicate does not save                         | unit and integration idempotency (no version increment, no save call); version assertions                   |
+| Q6 atomic version check, deterministic stale rejection   | one `UPDATE ... WHERE version = $n`                                            | integration row-lock stale writer; atomic raw update; compiled-runtime stale writer                         |
+| Q6 retry re-reads; no hidden retries                     | repository and service never retry                                             | unit "never retries on its own"; integration "re-reads and re-evaluates on retry"                           |
+| Q6 `TransactionScope` stays an Investigation port        | unchanged port and adapter                                                     | architecture checks; commit and rollback integration tests                                                  |
+| Q7 case content; no lifecycle                            | `InvestigationCase` has five fields                                            | unit "holds exactly identity, UUT reference, opened_at, version and links"                                  |
+| Q7 distinct errors, documented                           | specification section 12                                                       | one test per code (see the specification)                                                                   |
+| Q8 FailureObservation removed after replacement          | commits `03eb60e`, `a9e4f10`, `4425dca`                                        | removal plan section 11; `migrations.spec` asserts no `failure_observation`                                 |
+| Q9 order `registered_at`, `attempt_id`, role             | SQL `ORDER BY` with a role `CASE`                                              | integration ordering test (scrambled insertion, equal `registered_at`); mutants M1 and M2 fail it           |
+| Q10 four `timestamptz` columns                           | `created_at`, `registered_at`, `opened_at`, `linked_at`                        | integration "records created_at ... as UTC instants"; no execution time inferred                            |
+| Migration 0002 revised, nothing shared touched           | `0002` rewritten; `0001` unchanged                                             | `origin/main` holds only `0001`; checksums recorded in the implementation report                            |
+
+---
+
 ## Summary of recommendations (non-binding, original proposal)
 
 | #   | Topic                     | Recommended choice                                                                                            |

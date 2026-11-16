@@ -195,20 +195,23 @@ Status line updated in commit: ______________
 
 ## 6. S0-05 Domain Specification
 
-Commit: `0252689`. **Blocked on the Owner Decision Register** (Q1 to Q10).
+Commit: `0252689`. **The Engineering Owner approved this specification WITH CHANGES** (Q1); see
+[S0-05-owner-approval.md](../specs/S0-05-owner-approval.md). The amendments are committed and verified against the decision
+record in the [register traceability table](../specs/S0-05-owner-decision-register.md). The remaining gates concern the
+ADRs and the final acceptance.
 
-| Gate before approval                                                                                   | State | Owner confirms |
-| ------------------------------------------------------------------------------------------------------ | ----- | -------------- |
-| All ten questions answered in the register                                                             | open  | ☐              |
-| The answers written into the specification (amended specification committed)                           | open  | ☐              |
-| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | open  | ☐              |
-| Removal plan for FailureObservation approved (Q8)                                                      | open  | ☐              |
-| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | open  | ☐              |
-| ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)                 | open  | ☐              |
-| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open  | ☐              |
+| Gate before approval                                                                                   | State                                | Owner confirms |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------ | -------------- |
+| All ten questions answered in the register                                                             | done (Owner, approval record)        | ☑              |
+| The answers written into the specification (amended specification committed)                           | done (`814e8d3`)                     | ☐              |
+| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | done (Q8)                            | ☑              |
+| Removal plan for FailureObservation approved (Q8)                                                      | done, executed (`4425dca`)           | ☑              |
+| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | updated to the decisions (`814e8d3`) | ☐              |
+| ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)                 | open: all remain PROPOSED            | ☐              |
+| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open: Owner confirms                 | ☐              |
 
-**Known gaps at this point:** UUT, TestAttempt and link are not implemented (acceptance 1 to 3); acceptance 11 (Codex review)
-and 12 (Owner acceptance) are pending. Criteria 7 and 8 are met by A4 and A3.
+**Known gaps at this point:** acceptance 11 (Codex review of the final head) and 12 (Owner acceptance) are pending.
+Criteria 1 to 3 are met by the implementation; 7 and 8 are met by A4 and A3.
 
 **Sign-off**
 

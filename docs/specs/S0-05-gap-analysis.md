@@ -1,12 +1,32 @@
 # S0-05 — Gap Analysis (implementation vs. proposed specification)
 
-**Status:** PROPOSED. This analysis compares the code at PR #6 with
+**Status:** SUPERSEDED by the implementation, see the closing status below. The original analysis follows unchanged as a record of the
+gap at commit `4af1348`. It compared the code at PR #6 with
 [S0-05-investigation-aggregate-foundation.md](S0-05-investigation-aggregate-foundation.md), which is itself
 **PROPOSED — Engineering Owner Approval Required**. No approval is recorded.
 
 **Rule applied:** domain changes that depend on an unresolved requirement are not made. This document lists
 what is missing, what is outside the specification, and which questions the Engineering Owner must answer
 first. It invents no lifecycle rule, validation limit or identity-normalisation policy.
+
+## Closing status (after the Owner decisions)
+
+The Engineering Owner approved the specification with changes and answered Q1 to Q10
+([approval record](S0-05-owner-approval.md)). The tables below describe the code **before** that; the current state is:
+
+| Gap                                  | Outcome                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| 1.1 to 1.9, 2.1 to 2.5 (concepts)    | Closed: UUT, TestAttempt, InvestigationCase and CaseTestAttemptLink exist with tests                |
+| 3.1, 3.2, 3.3, 3.5, 3.6 (boundaries) | Closed: Q2 and Q6 decided; foreign keys and composite same-UUT keys; link inside the case aggregate |
+| 3.7 (mutable records)                | Closed: only the case is versioned; UUT, attempt and links are immutable (trigger)                  |
+| 4.1 FailureObservation               | Removed after the replacement tests existed (Q8, see the removal plan section 11)                   |
+| 4.2 `opened_at`                      | Kept by Owner decision (Q7)                                                                         |
+| 4.3 error codes                      | Documented and tested, specification section 12                                                     |
+| 4.4 same-UUT rule on links           | Done, in the domain and by two composite foreign keys                                               |
+| Acceptance 1, 2, 3                   | Met locally, evidence in the implementation report                                                  |
+| Acceptance 11, 12                    | Codex review of the final head and independent Owner acceptance are pending                         |
+
+---
 
 ## 1. Domain concepts (spec section 2)
 

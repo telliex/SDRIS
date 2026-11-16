@@ -139,3 +139,20 @@ follows the same removal steps here, with the branch as its archive.
 | Link semantics change after the tests are written           | Do not start before Q5 and Q6 are approved                                                                      |
 | Developer databases keep the old `0002`                     | `pnpm db:reset` instructions; `db:status` reports `modified`                                                    |
 | Rollback                                                    | Each step is its own commit and can be reverted; with the edit-0002 option, developers reset the database again |
+
+## 11. Execution record
+
+| Step                              | Commit                                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| Decision recorded                 | `814e8d3` docs(specs): record the Engineering Owner decisions Q1-Q10 for S0-05 |
+| Additive: UUT, TestAttempt, links | `03eb60e` feat(investigation): add UUT, TestAttempt and CaseTestAttemptLink    |
+| Replace: compiled-runtime checks  | `a9e4f10` test(runtime): re-express the compiled-runtime checks on links       |
+| Delete: FailureObservation        | `4425dca` refactor(investigation): remove the deferred FailureObservation      |
+
+Every proof listed in section 4 now exists on links: commit of version bump and write together, rollback on a domain
+rejection and on an injected database failure, simultaneous writers, the deterministic stale-writer case, retrying
+writers, a stale raw update, cross-UUT rejection through the whole stack and by the database, and a link whose case or
+attempt does not exist. Removed without a link equivalent: "description stored exactly as given" (replaced by the UUT and
+attempt attributes stored exactly as given) and "observation addressed to a different case" (no equivalent concept: a link
+is addressed by the case id). The `0001` migration and its schema comment, which still mention "failure observations" as the
+intended future content of the `investigation` schema, are published and were not changed.

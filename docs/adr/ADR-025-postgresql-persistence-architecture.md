@@ -690,7 +690,7 @@ names the approved handle.
 The S0-05 requirement was to validate the transaction abstraction with a real repository. Result:
 
 - The existing `UnitOfWork` and `executorFor` contracts were kept unchanged: callback-scoped, commit on resolve,
-  rollback on reject, context invalidated on exit. They sufficed for atomic version-bump-plus-observation writes,
+  rollback on reject, context invalidated on exit. They sufficed for atomic version-bump-plus-link writes,
   rollback on domain and database errors, and optimistic concurrency.
 - The application layer needs a transaction port that mentions no database type. Instead of moving `UnitOfWork` anywhere
   shared, the Investigation context owns a `TransactionScope` port in `src/application/ports` and an adapter that maps it
