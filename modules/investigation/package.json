@@ -6,7 +6,8 @@
   "types": "src/public/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"src/**/*.spec.ts\""
+    "test": "tsx --conditions=sdris-source --test \"src/**/*.spec.ts\"",
+    "build": "tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -14,8 +15,16 @@
     "typescript": "^5.7.3"
   },
   "exports": {
-    ".": "./src/public/index.ts",
-    "./composition": "./src/composition/index.ts"
+    ".": {
+      "sdris-source": "./src/public/index.ts",
+      "types": "./dist/public/index.d.ts",
+      "default": "./dist/public/index.js"
+    },
+    "./composition": {
+      "sdris-source": "./src/composition/index.ts",
+      "types": "./dist/composition/index.d.ts",
+      "default": "./dist/composition/index.js"
+    }
   },
   "typesVersions": {
     "*": {
