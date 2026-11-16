@@ -63,8 +63,11 @@ describe('migrations against real PostgreSQL', () => {
       [SCHEMA_NAMES],
     );
     assert.deepEqual(rows, [
+      { table_schema: 'investigation', table_name: 'case_test_attempt_link' },
       { table_schema: 'investigation', table_name: 'failure_observation' },
       { table_schema: 'investigation', table_name: 'investigation_case' },
+      { table_schema: 'investigation', table_name: 'test_attempt' },
+      { table_schema: 'investigation', table_name: 'uut' },
       { table_schema: 'system', table_name: 'schema_migrations' },
     ]);
   });

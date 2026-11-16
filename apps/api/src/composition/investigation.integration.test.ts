@@ -44,8 +44,16 @@ describe('Investigation through the apps/api composition root (real PostgreSQL)'
     observations: (await sql('select count(*)::int as n from investigation.failure_observation'))[0]
       .n as number,
   });
-  const open = async (u: UutRef = uut()): Promise<InvestigationCase> => {
-    const result = await service.openCase({ uut: u });
+  /** A UUT that exists in the database (cases may only be opened for existing UUTs). */
+  const registeredUut = async (): Promise<UutRef> => {
+    const result = await service.registerUut({ serialNumber: 'SN-SYNTHETIC' });
+    assert.ok(result.ok, JSON.stringify(result));
+    const ref = createEntityRef('UUT', result.value.id);
+    if (!ref.ok) throw new Error('bad ref');
+    return ref.value;
+  };
+  const open = async (u?: UutRef): Promise<InvestigationCase> => {
+    const result = await service.openCase({ uut: u ?? (await registeredUut()) });
     assert.ok(result.ok, JSON.stringify(result));
     return result.value;
   };
@@ -61,7 +69,7 @@ describe('Investigation through the apps/api composition root (real PostgreSQL)'
 
   describe('persistence', () => {
     it('stores a case and reads it back through the port', async () => {
-      const u = uut();
+      const u = await registeredUut();
       const created = await open(u);
       const loaded = await service.getCase(created.id);
       assert.ok(loaded);
@@ -78,10 +86,11 @@ describe('Investigation through the apps/api composition root (real PostgreSQL)'
         newId: <T extends string>() =>
           fixedId as unknown as import('@sdris/shared-kernel').EntityId<T>,
       }).service;
-      const first = await fixed.openCase({ uut: uut() });
+      const sharedUut = await registeredUut();
+      const first = await fixed.openCase({ uut: sharedUut });
       assert.ok(first.ok);
       const before = await counts();
-      const second = await fixed.openCase({ uut: uut() });
+      const second = await fixed.openCase({ uut: sharedUut });
       assert.ok(!second.ok && second.error.code === 'investigation.case_already_exists');
       assert.deepEqual(await counts(), before);
       assert.equal(
@@ -209,7 +218,8 @@ describe('Investigation through the apps/api composition root (real PostgreSQL)'
         'create trigger reject_case before insert on investigation.investigation_case for each row execute function investigation.reject_case()',
       );
       try {
-        await assert.rejects(service.openCase({ uut: uut() }), (error) =>
+        const owner = await registeredUut();
+        await assert.rejects(service.openCase({ uut: owner }), (error) =>
           causedBy(error, /no cases today/),
         );
       } finally {

@@ -90,7 +90,9 @@ describe('committed migrations', () => {
 
   it('the Investigation tables live only in the investigation schema', () => {
     const sql = migrations.map((m) => m.sql).join('\n');
-    assert.match(sql, /create table investigation\.investigation_case/);
+    for (const table of ['uut', 'test_attempt', 'investigation_case', 'case_test_attempt_link']) {
+      assert.match(sql, new RegExp(`create table investigation\\.${table} `));
+    }
     assert.match(sql, /create table investigation\.failure_observation/);
     assert.match(
       sql,
