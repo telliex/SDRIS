@@ -8,6 +8,8 @@ import {
   analyzeEntrypoint,
   createSurfaceProgram,
 } from '../../scripts/architecture/type-surface.mjs';
+import { workspaceSourcePaths } from '../../scripts/architecture/surfaces.mjs';
+import { loadWorkspace } from '../../scripts/architecture/workspace.mjs';
 import { buildScenario, repoRoot, runCli, scenarios } from './helpers.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -197,6 +199,7 @@ test('the real Investigation composition entrypoint has a clean, fully typed sur
   const program = createSurfaceProgram([entry], {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    paths: workspaceSourcePaths(loadWorkspace(repoRoot)),
   });
   const result = analyzeEntrypoint(program, entry, {
     infrastructureDirs: [path.join(repoRoot, 'modules/investigation/src/infrastructure')],
@@ -205,6 +208,18 @@ test('the real Investigation composition entrypoint has a clean, fully typed sur
     approvedDatabaseTypes: ['PersistenceHandle'],
     requireExplicitReturnTypes: true,
   });
+  assert.ok(
+    program
+      .getSourceFiles()
+      .some((f) => f.fileName.endsWith('infrastructure/database/src/persistence-handle.ts')),
+    'the database package must resolve to its source, otherwise the analysis is blind',
+  );
+  assert.ok(
+    program
+      .getSourceFiles()
+      .some((f) => f.fileName.endsWith('packages/shared-kernel/src/index.ts')),
+    'the shared kernel must resolve to its source',
+  );
   assert.deepEqual(result.leaks, [], JSON.stringify(result.leaks, null, 2));
   assert.deepEqual(result.missingReturnTypes, []);
   assert.deepEqual(result.declarationLeaks, []);
@@ -227,6 +242,7 @@ test('the real Investigation public entrypoint names no persistence type at all'
   const program = createSurfaceProgram([entry], {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    paths: workspaceSourcePaths(loadWorkspace(repoRoot)),
   });
   const result = analyzeEntrypoint(program, entry, {
     infrastructureDirs: [path.join(repoRoot, 'modules/investigation/src/infrastructure')],

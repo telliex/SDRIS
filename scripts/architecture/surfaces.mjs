@@ -4,6 +4,23 @@ import ts from 'typescript';
 import { analyzeEntrypoint, createSurfaceProgram } from './type-surface.mjs';
 import { loadWorkspace, toPosix } from './workspace.mjs';
 
+/**
+ * TypeScript `paths` that map every workspace package (and each published subpath) to its source entry.
+ * Resolution then does not depend on node_modules links, export conditions or whether `dist` was built,
+ * so the type surface is always analysed with full type information.
+ */
+export function workspaceSourcePaths(packages) {
+  const paths = {};
+  for (const pkg of packages) {
+    for (const [subpath, files] of pkg.entries) {
+      const file = [...files][0];
+      if (file && existsSync(file))
+        paths[subpath === '.' ? pkg.name : `${pkg.name}${subpath.slice(1)}`] = [file];
+    }
+  }
+  return paths;
+}
+
 /** Opaque contracts a composition entrypoint may name from the database package. Nothing else. */
 export const APPROVED_DATABASE_CONTRACTS = ['PersistenceHandle'];
 
@@ -47,6 +64,7 @@ export function checkModuleSurfaces({ root }) {
     module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
     noEmit: false,
+    paths: workspaceSourcePaths(packages),
   });
 
   const violations = [];

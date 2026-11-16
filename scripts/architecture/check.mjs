@@ -223,6 +223,11 @@ export function checkArchitecture({ root, matrixPath } = {}) {
         { hint: 'Add it to the layer policy via an ADR; do not guess its permissions.' },
       );
     }
+    for (const issue of pkg.conditionIssues) {
+      violate('package/exports-condition', manifestFile, 1, `${pkg.name} exports ${issue}.`, {
+        hint: 'Write each entrypoint as { "sdris-source": "./src/...", "types": "./dist/....d.ts", "default": "./dist/....js" } with dist mirroring src.',
+      });
+    }
     for (const pattern of pkg.unsupportedPatterns) {
       violate(
         'package/unsupported-exports-pattern',

@@ -1,0 +1,9 @@
+{
+  "violations": [
+    {
+      "rule": "package/exports-condition",
+      "file": "modules/investigation/package.json"
+    }
+  ],
+  "messageIncludes": "not supported"
+}
