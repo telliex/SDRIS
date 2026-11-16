@@ -19,8 +19,6 @@ import type { UutRef } from './uut';
  * repair effectiveness nor an RCA conclusion.
  */
 export type InvestigationCaseId = EntityId<'InvestigationCase'>;
-/** TRANSITIONAL: removed once the link-based tests replace the observation-based ones (Owner decision Q8). */
-export type FailureObservationId = EntityId<'FailureObservation'>;
 export type { UutRef } from './uut';
 
 /** The roles a link may have, in the order they are returned (Owner decisions Q5 and Q9). */
@@ -41,15 +39,6 @@ export interface CaseTestAttemptLink {
   readonly linkedAt: Timestamp;
 }
 
-/** TRANSITIONAL (Q8): deferred by the specification; removed in this PR after the replacement tests exist. */
-export interface FailureObservation {
-  readonly id: FailureObservationId;
-  readonly caseId: InvestigationCaseId;
-  readonly uut: UutRef;
-  readonly description: string;
-  readonly observedAt: Timestamp;
-}
-
 export interface InvestigationCase {
   readonly id: InvestigationCaseId;
   readonly uut: UutRef;
@@ -59,15 +48,10 @@ export interface InvestigationCase {
   readonly version: number;
   /** In retrieval order (registered_at, attempt id, role) when loaded; a newly added link is appended. */
   readonly links: readonly CaseTestAttemptLink[];
-  /** TRANSITIONAL (Q8). */
-  readonly observations: readonly FailureObservation[];
 }
 
 export type InvestigationDomainErrorCode =
-  | 'investigation.uut_mismatch'
-  | 'investigation.invalid_link_role'
-  | 'investigation.case_mismatch'
-  | 'investigation.duplicate_observation';
+  'investigation.uut_mismatch' | 'investigation.invalid_link_role';
 
 export type InvestigationDomainError = SdrisError<
   InvestigationDomainErrorCode,
@@ -97,7 +81,6 @@ export function openCase(input: {
     ...input,
     version: 1,
     links: Object.freeze([]),
-    observations: Object.freeze([]),
   });
 }
 
@@ -153,50 +136,4 @@ export function linkTestAttempt(
     link,
     created: true,
   });
-}
-
-/** TRANSITIONAL (Q8): the previous write operation, kept only until the link-based tests replace its proofs. */
-export function recordObservation(
-  investigationCase: InvestigationCase,
-  observation: FailureObservation,
-): Result<InvestigationCase, InvestigationDomainError> {
-  if (observation.caseId !== investigationCase.id) {
-    return err(
-      createError({
-        code: 'investigation.case_mismatch' as const,
-        message: 'The observation belongs to a different case.',
-        details: { expected: investigationCase.id, actual: observation.caseId },
-      }),
-    );
-  }
-  if (
-    observation.uut.entityType !== investigationCase.uut.entityType ||
-    observation.uut.id !== investigationCase.uut.id
-  ) {
-    return err(
-      createError({
-        code: 'investigation.uut_mismatch' as const,
-        message: 'The observation was made on a different UUT than the case; it was not attached.',
-        details: { expected: investigationCase.uut.id, actual: observation.uut.id },
-      }),
-    );
-  }
-  if (investigationCase.observations.some((existing) => existing.id === observation.id)) {
-    return err(
-      createError({
-        code: 'investigation.duplicate_observation' as const,
-        message: 'An observation with this id is already recorded on the case.',
-        details: { actual: observation.id },
-      }),
-    );
-  }
-  return ok(
-    Object.freeze({
-      ...investigationCase,
-      observations: Object.freeze([
-        ...investigationCase.observations,
-        Object.freeze({ ...observation }),
-      ]),
-    }),
-  );
 }

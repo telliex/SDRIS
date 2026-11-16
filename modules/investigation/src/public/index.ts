@@ -4,8 +4,6 @@
  */
 export type {
   CaseTestAttemptLink,
-  FailureObservation,
-  FailureObservationId,
   InvestigationCase,
   InvestigationCaseId,
   InvestigationDomainError,

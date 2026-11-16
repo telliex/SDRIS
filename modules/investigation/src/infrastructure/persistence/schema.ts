@@ -36,12 +36,3 @@ export const caseTestAttemptLink = investigation.table('case_test_attempt_link',
   role: text('role').notNull(),
   linkedAt: timestamp('linked_at', { withTimezone: true, mode: 'date' }).notNull(),
 });
-
-/** TRANSITIONAL (Owner decision Q8): removed once the link-based tests replace the observation-based ones. */
-export const failureObservation = investigation.table('failure_observation', {
-  id: uuid('id').primaryKey(),
-  caseId: uuid('case_id').notNull(),
-  uutId: uuid('uut_id').notNull(),
-  description: text('description').notNull(),
-  observedAt: timestamp('observed_at', { withTimezone: true, mode: 'date' }).notNull(),
-});

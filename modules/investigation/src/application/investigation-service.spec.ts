@@ -303,28 +303,4 @@ describe('InvestigationService', () => {
       assert.equal((await service.getCase(c.id))?.links.length, 0);
     });
   });
-
-  describe('observations (transitional, Q8)', () => {
-    it('records an observation and returns the new version', async () => {
-      const c = await open();
-      const result = await service.recordObservation({
-        caseId: c.id,
-        uut: c.uut,
-        description: 'fan stalled',
-      });
-      assert.ok(result.ok && result.value.version === 2);
-    });
-
-    it('rejects a cross-UUT observation and changes nothing', async () => {
-      const c = await open();
-      const other = refOf(await uut());
-      const result = await service.recordObservation({
-        caseId: c.id,
-        uut: other,
-        description: 'wrong unit',
-      });
-      assert.ok(!result.ok && result.error.code === 'investigation.uut_mismatch');
-      assert.equal(store.versions.get(c.id), 1);
-    });
-  });
 });

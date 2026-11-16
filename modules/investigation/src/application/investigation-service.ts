@@ -11,9 +11,7 @@ import {
   linkTestAttempt,
   openCase,
   parseLinkRole,
-  recordObservation,
   type CaseTestAttemptLink,
-  type FailureObservationId,
   type InvestigationCase,
   type InvestigationCaseId,
   type InvestigationDomainError,
@@ -83,13 +81,6 @@ export interface InvestigationService {
     /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
     readonly role: string;
   }): Promise<Result<LinkResult, InvestigationServiceError>>;
-
-  /** TRANSITIONAL (Owner decision Q8): removed once the link-based tests replace its proofs. */
-  recordObservation(command: {
-    readonly caseId: InvestigationCaseId;
-    readonly uut: UutRef;
-    readonly description: string;
-  }): Promise<Result<{ readonly version: number }, InvestigationServiceError>>;
 }
 
 export interface InvestigationServiceDependencies {
@@ -212,21 +203,6 @@ export function createInvestigationService(
         return saved.ok
           ? ok({ version: saved.value.version, link: outcome.value.link, created: true })
           : err(saved.error);
-      }),
-
-    recordObservation: (command) =>
-      transactional(async (tx) => {
-        const current = await deps.repository.get(command.caseId, tx);
-        if (!current) return notFound('investigation.case_not_found', 'case', command.caseId);
-        const updated = recordObservation(current, {
-          id: deps.newId<'FailureObservation'>() as FailureObservationId,
-          caseId: command.caseId,
-          uut: command.uut,
-          description: command.description,
-          observedAt: deps.now(),
-        });
-        if (!updated.ok) return err(updated.error);
-        return deps.repository.save(updated.value, tx);
       }),
   };
 }

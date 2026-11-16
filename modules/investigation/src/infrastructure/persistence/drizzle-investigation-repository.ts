@@ -17,7 +17,6 @@ import {
 import {
   LINK_ROLES,
   type CaseTestAttemptLink,
-  type FailureObservation,
   type InvestigationCase,
   type InvestigationCaseId,
   type LinkRole,
@@ -29,13 +28,7 @@ import type {
   RepositoryError,
 } from '../../application/ports/investigation-repository';
 import type { TransactionToken } from '../../application/ports/transaction-scope';
-import {
-  caseTestAttemptLink,
-  failureObservation,
-  investigationCase,
-  testAttempt,
-  uut as uutTable,
-} from './schema';
+import { caseTestAttemptLink, investigationCase, testAttempt, uut as uutTable } from './schema';
 
 const PG_FOREIGN_KEY_VIOLATION = '23503';
 
@@ -164,9 +157,7 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
       const failure = await this.insertLinks(created.links, tx);
       if (failure) return failure;
     }
-    return created.observations.length === 0
-      ? ok(undefined)
-      : ((await this.insertObservations(created, created.observations, tx)) ?? ok(undefined));
+    return ok(undefined);
   }
 
   async get(
@@ -186,11 +177,6 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
       .where(eq(caseTestAttemptLink.caseId, id))
       // Explicit and total: never rely on implicit row order (Owner decision Q9).
       .orderBy(asc(testAttempt.registeredAt), asc(caseTestAttemptLink.attemptId), roleOrder);
-    const observations = await executor
-      .select()
-      .from(failureObservation)
-      .where(eq(failureObservation.caseId, id))
-      .orderBy(asc(failureObservation.observedAt), asc(failureObservation.id));
     const caseId = stored(parseEntityId<'InvestigationCase'>(row.id, 'id'), 'case id');
     return Object.freeze({
       id: caseId,
@@ -208,17 +194,6 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
             uut: uutRef(link.uutId),
             role: link.role as LinkRole,
             linkedAt: stored(timestampFromDate(link.linkedAt, 'linked_at'), 'linked_at'),
-          }),
-        ),
-      ),
-      observations: Object.freeze(
-        observations.map((o) =>
-          Object.freeze({
-            id: stored(parseEntityId<'FailureObservation'>(o.id, 'id'), 'observation id'),
-            caseId,
-            uut: uutRef(o.uutId),
-            description: o.description,
-            observedAt: stored(timestampFromDate(o.observedAt, 'observed_at'), 'observed_at'),
           }),
         ),
       ),
@@ -262,19 +237,6 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
       const failure = await this.insertLinks(freshLinks, tx);
       if (failure) return failure;
     }
-    const existing = new Set(
-      (
-        await executor
-          .select({ id: failureObservation.id })
-          .from(failureObservation)
-          .where(eq(failureObservation.caseId, changed.id))
-      ).map((row) => row.id),
-    );
-    const fresh = changed.observations.filter((observation) => !existing.has(observation.id));
-    if (fresh.length > 0) {
-      const failure = await this.insertObservations(changed, fresh, tx);
-      if (failure) return failure;
-    }
     return ok({ version: bumped.version });
   }
 
@@ -305,49 +267,6 @@ export class DrizzleInvestigationRepository implements InvestigationRepository {
           createError({
             code: 'investigation.uut_mismatch' as const,
             message: 'A link names a different UUT than its case or attempt; storage refused it.',
-          }),
-        );
-      }
-      throw error;
-    }
-  }
-
-  /** TRANSITIONAL (Q8). Appends observations. Returns a failure result, or undefined when all were stored. */
-  private async insertObservations(
-    owner: InvestigationCase,
-    observations: readonly FailureObservation[],
-    tx: TransactionToken,
-  ): Promise<Result<never, RepositoryError> | undefined> {
-    try {
-      const inserted = await this.executor(tx)
-        .insert(failureObservation)
-        .values(
-          observations.map((o) => ({
-            id: o.id,
-            caseId: owner.id,
-            uutId: o.uut.id,
-            description: o.description,
-            observedAt: new Date(o.observedAt),
-          })),
-        )
-        .onConflictDoNothing()
-        .returning({ id: failureObservation.id });
-      if (inserted.length !== observations.length) {
-        return err(
-          createError({
-            code: 'investigation.observation_id_in_use' as const,
-            message: 'An observation id is already used by another case.',
-          }),
-        );
-      }
-      return undefined;
-    } catch (error) {
-      // The composite foreign key (case_id, uut_id) is the database-level cross-UUT rejection.
-      if (pgErrorCode(error) === PG_FOREIGN_KEY_VIOLATION) {
-        return err(
-          createError({
-            code: 'investigation.uut_mismatch' as const,
-            message: 'An observation names a different UUT than its case; storage refused it.',
           }),
         );
       }

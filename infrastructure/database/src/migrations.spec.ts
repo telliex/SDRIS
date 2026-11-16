@@ -93,7 +93,7 @@ describe('committed migrations', () => {
     for (const table of ['uut', 'test_attempt', 'investigation_case', 'case_test_attempt_link']) {
       assert.match(sql, new RegExp(`create table investigation\\.${table} `));
     }
-    assert.match(sql, /create table investigation\.failure_observation/);
+    assert.doesNotMatch(sql, /failure_observation/, 'FailureObservation is deferred (Owner Q8)');
     assert.match(
       sql,
       /foreign key \(case_id, uut_id\) references investigation\.investigation_case \(id, uut_id\)/,

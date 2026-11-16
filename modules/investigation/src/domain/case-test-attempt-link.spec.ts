@@ -97,13 +97,6 @@ describe('CaseTestAttemptLink (domain)', () => {
     const result = linkTestAttempt(c, newAttempt(c.uut, 'SAT'), 'RETEST', at);
     assert.ok(result.ok);
     const updated = result.value.investigationCase;
-    assert.deepEqual(Object.keys(updated).sort(), [
-      'id',
-      'links',
-      'observations',
-      'openedAt',
-      'uut',
-      'version',
-    ]);
+    assert.deepEqual(Object.keys(updated).sort(), ['id', 'links', 'openedAt', 'uut', 'version']);
   });
 });

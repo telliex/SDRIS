@@ -9,7 +9,6 @@ export type RepositoryErrorCode =
   | 'investigation.uut_already_exists'
   | 'investigation.attempt_already_exists'
   | 'investigation.concurrency_conflict'
-  | 'investigation.observation_id_in_use'
   | 'investigation.uut_mismatch';
 
 export type RepositoryError = SdrisError<
@@ -43,7 +42,7 @@ export interface InvestigationRepository {
   get(id: InvestigationCaseId, tx?: TransactionToken): Promise<InvestigationCase | undefined>;
 
   /**
-   * Persists the links (and transitional observations) that are not stored yet if, and only if, the stored
+   * Persists the links that are not stored yet if, and only if, the stored
    * version still equals `investigationCase.version`. The check is one atomic UPDATE in PostgreSQL. Returns the
    * new stored version, or a concurrency conflict. The repository never retries: the caller re-reads and
    * re-evaluates. Stored links are never rewritten.

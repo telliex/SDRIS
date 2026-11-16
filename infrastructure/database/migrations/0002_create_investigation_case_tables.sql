@@ -62,21 +62,7 @@ create trigger test_attempt_immutable before update on investigation.test_attemp
 create trigger case_test_attempt_link_immutable before update on investigation.case_test_attempt_link
   for each row execute function investigation.reject_update();
 
--- Transitional (removed once the link-based tests replace it): FailureObservation is deferred by the specification.
-create table investigation.failure_observation (
-  id          uuid        primary key,
-  case_id     uuid        not null,
-  uut_id      uuid        not null,
-  description text        not null,
-  observed_at timestamptz not null,
-  constraint failure_observation_case_uut_fkey
-    foreign key (case_id, uut_id) references investigation.investigation_case (id, uut_id)
-);
-
-create index failure_observation_case_idx on investigation.failure_observation (case_id, observed_at, id);
-
 comment on table investigation.uut is 'Owner: Investigation context (S0-05). Immutable after creation.';
 comment on table investigation.test_attempt is 'Owner: Investigation context. Immutable after registration.';
 comment on table investigation.investigation_case is 'Owner: Investigation context. Aggregate root; owns its links.';
 comment on table investigation.case_test_attempt_link is 'Owner: Investigation context. Part of the InvestigationCase aggregate; immutable.';
-comment on table investigation.failure_observation is 'Owner: Investigation context. Transitional; deferred by S0-05.';
