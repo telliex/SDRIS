@@ -1,5 +1,8 @@
 # S0-05 Engineering Owner Approval — Clarification Addendum
 
+> **SUPERSEDED** by [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md). Kept for traceability only; where it
+> differs from the final approval, the final approval wins.
+
 **Status:** Proposed clarification to the approved design direction (as labelled by the Engineering Owner)  
 **Applies to:** Q4, Q5, Q6, Q9, Q10 and approval governance
 

@@ -1,10 +1,11 @@
 # S0-05 — Owner Decision Register
 
-**Status:** DECIDED — the Engineering Owner answered Q1 to Q10 (APPROVED WITH CHANGES). The decisions are recorded verbatim
-in [S0-05-owner-approval.md](S0-05-owner-approval.md) and summarised in the table below. The "Recommended choice" text further
-down is the original proposal and is kept for traceability; where it differs from the decision, **the decision wins**.
+**Status:** DECIDED — the Engineering Owner's [final approval](S0-05-final-owner-approval.md) (v1.0, APPROVED WITH CHANGES) answers
+Q1 to Q10 and supersedes every earlier approval draft and addendum. The decisions are summarised in the table below. The
+"Recommended choice" text further down is the original proposal and is kept for traceability; where it differs from a
+decision, **the decision wins**.
 
-**Sources:** [S0-05 specification](S0-05-investigation-aggregate-foundation.md) (PROPOSED),
+**Sources:** [S0-05 specification](S0-05-investigation-aggregate-foundation.md) (APPROVED WITH CHANGES),
 [gap analysis](S0-05-gap-analysis.md) section 6 (the ten questions, quoted verbatim below),
 [ADR-025](../adr/ADR-025-postgresql-persistence-architecture.md) with Amendments A1 to A4 (all PROPOSED).
 
@@ -23,70 +24,69 @@ rules, new domain state semantics, public API compatibility).
 
 ## Recorded Owner decisions
 
-| #   | Decision                             | Outcome                                                                                                                                            | Differs from the recommendation                                      |
-| --- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Q1  | Approval                             | APPROVED WITH CHANGES; the revised specification becomes the baseline once verified against the decision record                                    | no                                                                   |
-| Q2  | UUT ownership (revised: provisional) | APPROVED: Investigation owns the UUT table; case and attempt use foreign keys; transfer needs a separate decision                                  | no (the "provisional" note becomes "separate decision")              |
-| Q3  | UUT attributes                       | APPROVED: optional, not unique, stored as supplied                                                                                                 | no                                                                   |
-| Q4  | TestAttempt                          | APPROVED WITH CHANGES: stage required from a controlled vocabulary (`IST`, `SAT`); external execution reference optional and not unique; immutable | yes: controlled stage vocabulary; the reference is optional          |
-| Q5  | Link semantics                       | APPROVED WITH CONDITIONS: key `(case_id, attempt_id, role)`; idempotent duplicates; multiple `INITIAL_FAILURE` allowed; roles immutable            | no (multiplicity stated explicitly: several `INITIAL_FAILURE` links) |
-| Q6  | Aggregate, concurrency               | APPROVED WITH CHANGES: link inside the case aggregate; new link bumps the version, an idempotent duplicate does not; no hidden retries             | no (adds: no hidden repository retries)                              |
-| Q7  | Case content                         | APPROVED WITH CHANGES: `opened_at` is retained; five distinguishing error cases                                                                    | yes: `opened_at` kept                                                |
-| Q8  | FailureObservation                   | APPROVED FOR REMOVAL after replacement tests exist                                                                                                 | no                                                                   |
-| Q9  | Retrieval order                      | APPROVED WITH CHANGES: `registered_at`, then `attempt_id`, then role order                                                                         | yes: `registered_at` first                                           |
-| Q10 | Timestamps                           | APPROVED WITH CHANGES: `created_at`, `registered_at`, `opened_at`, `linked_at`; `timestamptz`, UTC                                                 | yes: timestamps are required                                         |
+| #   | Topic                  | Decision (final approval v1.0)                                                                                                                                                                                            | Differs from the original recommendation                              |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Q1  | Approval               | APPROVED WITH CHANGES; the resulting specification is the authoritative baseline                                                                                                                                          | no                                                                    |
+| Q2  | UUT ownership          | APPROVED: Investigation owns UUT in the `investigation` schema with real foreign keys; reconsidered only when a concrete cross-context requirement emerges; no transfer authorised                                        | no                                                                    |
+| Q3  | UUT attributes         | APPROVED: optional, non-unique, stored as supplied; no automatic matching by SN or hostname                                                                                                                               | no                                                                    |
+| Q4  | TestAttempt            | APPROVED WITH CHANGES: stage required, controlled (`IST`, `SAT`), unsupported rejected; optional non-unique external execution reference; immutable; no result field; registration proves nothing about the external test | yes: controlled vocabulary; the reference is optional                 |
+| Q5  | Link semantics         | APPROVED WITH CONDITIONS: key `(case_id, attempt_id, role)`, no link UUID; several roles and several `INITIAL_FAILURE`; identical links not duplicated; roles immutable; idempotency subject to Q6                        | no (adds: idempotency yields to the Expected Version)                 |
+| Q6  | Aggregate, concurrency | APPROVED, option A: case aggregate owns links; **`linkAttempt` requires `expectedVersion`**; stale version beats idempotency; matching duplicate is a no-op; new link plus version increment is atomic; no retries        | no (the mandatory parameter and the precedence are new)               |
+| Q7  | Case content           | APPROVED WITH CHANGES: identity, UUT, `opened_at`, `version`, links; observation errors removed                                                                                                                           | yes: `opened_at` kept                                                 |
+| Q8  | FailureObservation     | APPROVED FOR REMOVAL, replacement before removal                                                                                                                                                                          | no                                                                    |
+| Q9  | Retrieval order        | APPROVED WITH CHANGES: `registered_at`, `attempt_id`, role order; explicit in every query                                                                                                                                 | yes: `registered_at` first                                            |
+| Q10 | Timestamps             | APPROVED WITH CHANGES: four `timestamptz` fields, UTC, **one injected application clock**, no database time function in the domain, no caller override                                                                    | yes: timestamps are required; the generation mechanism is now decided |
 
-Migration policy: the Owner authorised revising the unreleased `0002` after re-verifying that nothing shared depends on its
-checksum (see [the persistence policy](S0-05-proposed-persistence-policy.md) section 10).
+Migration policy: `0002` is revised in place only because it never reached a shared environment (evidence in the
+[persistence policy](S0-05-proposed-persistence-policy.md) section 10); `0001` is unchanged.
 
 ---
 
 ## Traceability: decision, implementation, evidence
 
-Verification of the specification against the decision record (Q1). Test names are in
-`modules/investigation/src/**/*.spec.ts` (unit), `apps/api/src/composition/investigation*.integration.test.ts` (real
-PostgreSQL) and `tests/runtime/` (compiled, plain Node).
+Verification of the specification against the final approval (Q1). Test names are in `modules/investigation/src/**/*.spec.ts`
+(unit), `apps/api/src/composition/investigation*.integration.test.ts` (real PostgreSQL) and `tests/runtime/` (compiled,
+plain Node).
 
-| Decision                                                 | Implementation                                                                 | Evidence                                                                                                                                                   |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q2 Investigation owns UUT; case and attempt use FKs      | `investigation.uut`; FKs on `test_attempt.uut_id`, `investigation_case.uut_id` | "is also enforced by the database: stage vocabulary, UUT foreign keys"; unknown UUT for attempt and case                                                   |
-| Q3 SN and hostname optional, not unique, as supplied     | nullable columns, no unique index, no checks                                   | unit "stores serial number and hostname exactly as supplied"; integration "as supplied, duplicates allowed"                                                |
-| Q4 stage `IST`/`SAT`; optional, non-unique execution ref | `parseTestStage`, `check (stage in ...)`, nullable reference                   | unit "accepts exactly the controlled vocabulary"; "rejects anything outside"; integration invalid stage                                                    |
-| Q4 no result field; immutable                            | no result column; update trigger                                               | unit "has no result field"; integration "keeps UUT, attempt and link rows immutable"                                                                       |
-| Q5 roles, same UUT, key `(case, attempt, role)`          | `LINK_ROLES`, composite FKs, primary key                                       | unit link specs; integration "enforces unique (case_id, attempt_id, role)"                                                                                 |
-| Q5 several roles per pair, several `INITIAL_FAILURE`     | no narrower key, no cardinality rule                                           | unit and integration "permits several roles ... several INITIAL_FAILURE links"                                                                             |
-| Q5 idempotent duplicate; roles immutable                 | `linkTestAttempt` returns `created: false`; update trigger                     | unit "is idempotent"; integration "is idempotent: an identical repeat changes nothing"                                                                     |
-| Q5 cross-UUT rejected in application and database        | domain check; `uut_mismatch`; two composite FKs                                | unit "refuses an attempt of another UUT"; integration forged-link test with three mismatches                                                               |
-| Q6 link inside case aggregate; version bump rules        | `save` bumps the version once; duplicate does not save                         | unit and integration idempotency (no version increment, no save call); version assertions                                                                  |
-| Q6 atomic version check, deterministic stale rejection   | one `UPDATE ... WHERE version = $n`                                            | integration row-lock stale writer; atomic raw update; compiled-runtime stale writer                                                                        |
-| Q6 retry re-reads; no hidden retries                     | repository and service never retry                                             | unit "never retries on its own"; integration "re-reads and re-evaluates on retry"                                                                          |
-| Q6 `TransactionScope` stays an Investigation port        | unchanged port and adapter                                                     | architecture checks; commit and rollback integration tests                                                                                                 |
-| Q7 case content; no lifecycle                            | `InvestigationCase` has five fields                                            | unit "holds exactly identity, UUT reference, opened_at, version and links"                                                                                 |
-| Q7 distinct errors, documented                           | specification section 12                                                       | one test per code (see the specification)                                                                                                                  |
-| Q8 FailureObservation removed after replacement          | commits `03eb60e`, `a9e4f10`, `4425dca`                                        | removal plan section 11; `migrations.spec` asserts no `failure_observation`                                                                                |
-| Q9 order `registered_at`, `attempt_id`, role             | SQL `ORDER BY` with a role `CASE`                                              | integration ordering test (scrambled insertion, equal `registered_at`); mutants M1 and M2 fail it                                                          |
-| Q10 four `timestamptz` columns, generated by PostgreSQL  | `default now()`; the adapter never writes them; domain drafts carry none       | integration "generates every timestamp in PostgreSQL ... callers cannot supply or override one"; unit "decides to create a link ... without any timestamp" |
-| Migration 0002 revised, nothing shared touched           | `0002` rewritten; `0001` unchanged                                             | `origin/main` holds only `0001`; checksums recorded in the implementation report                                                                           |
+| Decision                                                   | Implementation                                                                 | Evidence                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Q2 Investigation owns UUT; real foreign keys               | `investigation.uut`; FKs on `test_attempt.uut_id`, `investigation_case.uut_id` | integration "stage vocabulary, UUT foreign keys"; unknown UUT for attempt and case                                              |
+| Q3 SN and hostname optional, non-unique, as supplied       | nullable columns, no unique index, no checks                                   | unit "stores serial number and hostname exactly as supplied"; integration "as supplied, and allows duplicates"                  |
+| Q4 stage `IST`/`SAT`, rejected otherwise                   | `parseTestStage`, `check (stage in ...)`                                       | unit "accepts exactly the controlled vocabulary", "rejects anything outside"; service and integration invalid stage             |
+| Q4 optional non-unique reference; no result; immutable     | nullable column; no result column; update trigger                              | unit "has no result field"; integration optional, non-unique external execution reference; immutability trigger                 |
+| Q5 composite link key, several roles and `INITIAL_FAILURE` | primary key `(case_id, attempt_id, role)`; role check                          | integration "enforces unique (case_id, attempt_id, role)", "permits several roles ... several INITIAL_FAILURE links"            |
+| Q5 same-UUT at application and database level              | domain check; `uut_mismatch`; two composite FKs                                | unit "refuses an attempt of another UUT"; integration forged links violating both composite keys                                |
+| Q5/Q6 matching-version idempotency                         | `linkAttempt` returns `created: false`, no save                                | unit and integration "matching version and identical link: idempotent success"; compiled runtime "identical link is idempotent" |
+| Q6 stale version beats idempotency                         | version comparison before the duplicate branch                                 | unit and integration "stale version beats idempotency"; compiled runtime "stale version beats idempotency"; mutants Q1 and Q2   |
+| Q6 validation precedes the version check                   | role, existence and same-UUT checks first                                      | unit and integration "checks existence and same-UUT ownership before the version"; mutant Q3                                    |
+| Q6 atomic link plus version; rollback                      | one `UPDATE ... WHERE version`, then the link insert, one transaction          | integration commit and rollback tests, including an injected database failure after the version bump                            |
+| Q6 concurrent writers; deterministic stale rejection       | row-lock technique, no timing luck                                             | integration "two concurrent identical link requests", "two concurrent different link requests", stale writer, torn read         |
+| Q6 no retries; unrelated errors never idempotent success   | no retry code; only the two same-UUT keys translated                           | unit "never reached the repository, and was not retried"; integration "does not suppress an unrelated database error"           |
+| Q7 case content; errors defined and tested                 | five fields; section 12 codes                                                  | unit "holds exactly identity, UUT reference, opened_at, version and links"; one test per code                                   |
+| Q8 FailureObservation removed after replacement            | commits `03eb60e`, `a9e4f10`, `4425dca`                                        | removal plan section 11; `migrations.spec` asserts no `failure_observation`                                                     |
+| Q9 order `registered_at`, `attempt_id`, role               | SQL `ORDER BY` with a role `CASE`                                              | integration ordering test with scrambled insertion and two attempts sharing one `registered_at`; mutants fail it                |
+| Q10 four `timestamptz` fields from one injected clock      | `deps.now()` in the service; no timestamp in any command; no column defaults   | integration "persists the timestamps of one injected application clock as UTC instants, and commands cannot override them"      |
+| Migration 0002 revised, nothing shared touched             | `0002` rewritten; `0001` unchanged                                             | `origin/main` holds only `0001`; checksums in the implementation report                                                         |
 
 ---
 
-## Clarification addendum and document consistency check
+## Document consistency check (against the final approval)
 
-The Owner's [clarification addendum](S0-05-owner-clarification-addendum.md) (A to G) is recorded here as confirmed design
-direction (addendum F1) and incorporated into the specification (section 13) and the persistence policy. Contradictions
-found between the documents before this status was kept, and how each was resolved:
+The final approval supersedes the first approval, the revised approval and the clarification addendum. Contradictions found
+between the documents and the code, and how each was resolved:
 
-| #   | Contradiction                                                                                                          | Resolution                                                                                          |
-| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | Q10 said "timezone-aware, UTC" but did not say who generates the timestamps; the code used an application clock option | Addendum D2/D4 decides: PostgreSQL generates them. Code, migration, policy, spec and tests changed  |
-| 2   | Policy section 8 SQL and `persistence.md` showed timestamp columns without a database default                          | Both now show `default now()`                                                                       |
-| 3   | The register's own traceability row for Q10 cited a test that set a caller clock                                       | Replaced by the database-generated, non-overridable timestamp test                                  |
-| 4   | The original register recommended Q4-A (free text stage) and Q7 "remove `opened_at`", the Owner decided otherwise      | Already marked as differing in the decisions table; the decisions win                               |
-| 5   | The first approval said Q2 "APPROVED"; the revised approval says "provisionally"                                       | Spec and register use "provisionally"                                                               |
-| 6   | The addendum header says "Proposed clarification" while the Owner asked for it to be implemented                       | Recorded with the Owner's own label; nothing is marked ACCEPTED, ADR-025 and A1 to A4 stay PROPOSED |
+| #   | Contradiction                                                                                                                                              | Resolution                                                                                                     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 1   | Addendum D2/D4: timestamps generated by PostgreSQL; final Q10: one injected application clock, no database time function in the domain                     | Final approval wins. Code, migration (no timestamp defaults), spec, policy and tests follow the injected clock |
+| 2   | Addendum C5: a concurrent identical request may return idempotent success after confirming the link; final Q6: a stale `expectedVersion` beats idempotency | Final approval wins. `linkAttempt` requires `expectedVersion`; idempotency only at the matching version        |
+| 3   | The earlier operation `linkTestAttempt` took no version; the final contract names `linkAttempt(expectedVersion)`                                           | Renamed and made mandatory; tests and the compiled-runtime check follow                                        |
+| 4   | Earlier approvals said Q2 "APPROVED" and, later, "provisionally"                                                                                           | Final approval: APPROVED, reconsidered only when a concrete cross-context requirement emerges                  |
+| 5   | The original recommendations (Q4-A free text stage, Q7 remove `opened_at`, Q9 order by id only)                                                            | Marked as differing in the decisions table; the decisions win                                                  |
+| 6   | The approval says external `executionReference`; code and column say `externalExecutionReference` / `external_execution_reference`                         | Kept to avoid confusion with the internal attempt id; mapping recorded in the specification (section 11)       |
+| 7   | Status labels: the addendum and the consolidation draft say "Proposed" / "subject to confirmation"                                                         | The final approval v1.0 is the confirmation; the older records carry a SUPERSEDED banner                       |
 
-No other contradiction was found between the decision records, the specification, the persistence policy and the
-code. The specification keeps the status APPROVED WITH CHANGES given by the Owner.
+No other contradiction was found between the decision records, the specification, the persistence policy, the removal plan
+and the code. ADR-025 and Amendments A1 to A4 are unaffected and remain PROPOSED.
 
 ---
 

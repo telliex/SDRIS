@@ -1,5 +1,8 @@
 # SDRIS — S0-05 Engineering Owner Approval (Revised)
 
+> **SUPERSEDED** by [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md). Kept for traceability only; where it
+> differs from the final approval, the final approval wins.
+
 **Decision:** APPROVED WITH CHANGES  
 **Scope:** S0-05 Domain Specification and Step 4 implementation  
 **Authority:** Engineering Owner confirmation in the Claude Code session, recorded here

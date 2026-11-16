@@ -1,7 +1,7 @@
 # S0-05 — Proposed Persistence and Identity Policy
 
-**Status:** UPDATED TO THE OWNER DECISIONS ([approval record](S0-05-owner-approval.md)). This is the persistence policy
-that the S0-05 implementation follows. The SQL in section 8 mirrors migration `0002`, which stays the authoritative
+**Status:** UPDATED TO THE FINAL OWNER APPROVAL ([v1.0](S0-05-final-owner-approval.md), which supersedes every earlier approval draft
+and addendum). This is the persistence policy that the S0-05 implementation follows. The SQL in section 8 mirrors migration `0002`, which stays the authoritative
 definition.
 
 **Principle:** no implicit uniqueness and no implicit normalisation. Every constraint that will exist is listed in section 9,
@@ -36,45 +36,51 @@ and every constraint that will deliberately **not** exist is listed next to it.
 - **Policy (Q5):**
   - the link key is `(case_id, attempt_id, role)`;
   - role is one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT` (the roles the specification lists);
-  - repeating an identical link is an idempotent no-op that returns the existing link and does not advance the case version;
+  - repeating an identical link **at the matching `expectedVersion`** is an idempotent no-op that returns the existing link and
+    does not advance the case version; at a stale `expectedVersion` it is a `concurrency_conflict` (section 6);
   - linking the same attempt again with a different role creates a second link (the key differs);
   - several `INITIAL_FAILURE` links (and any number of links per role) are allowed, and roles are immutable: changing a role
     means creating another link.
 - **Not done:** no "exactly one INITIAL_FAILURE" rule and no automatic closing of a case. Linking a RETEST records the
   relationship only; it establishes no repair effectiveness and no RCA conclusion.
 
-## 4a. Duplicate handling and unrelated errors (revised approval, Q5)
+## 4a. Duplicate handling and unrelated errors (Q5, Q6)
 
-Duplicate handling is concurrency-safe: a duplicate is detected from a fresh read in the same transaction, and a concurrent
-writer is stopped by the atomic version check, so the caller re-reads and finds an idempotent duplicate. The adapter
-translates exactly one database failure, a violation of the two same-UUT foreign keys (`SQLSTATE 23503` **and** the
-constraint name), to `uut_mismatch`. Everything else (a unique violation from a racing raw writer, a check, a trigger, a
-lost connection) is thrown and rolls the transaction back; nothing is suppressed. Inserts of UUT, attempt and case name
-their conflict target (`id`) instead of ignoring every conflict.
+Duplicate handling is concurrency-safe: the case and its links are read by one statement, the version is compared, and only
+then is an existing identical link treated as an idempotent success; a concurrent writer is stopped by the atomic version
+update. The adapter translates exactly one database failure, a violation of the two same-UUT foreign keys (`SQLSTATE 23503`
+**and** the constraint name), to `uut_mismatch`. Everything else (a unique violation from a racing raw writer, a check, a
+trigger, a deadlock, a lost connection) is thrown and rolls the transaction back; nothing is suppressed and nothing becomes
+idempotent success. Inserts of UUT, attempt and case name their conflict target (`id`) instead of ignoring every conflict.
 
 ## 5. Same-UUT protection
 
-Enforced twice, by the same mechanism that already protects observations in `0002`:
+Enforced twice:
 
 - **Application:** the domain operation that links an attempt to a case compares the two UUT references and refuses a
   mismatch without attaching anything.
 - **Database:** `investigation_case` and `test_attempt` each have `unique (id, uut_id)`. The link row stores one `uut_id` and
   has two composite foreign keys, `(case_id, uut_id)` to the case and `(attempt_id, uut_id)` to the attempt, so a row whose two
   sides name different UUTs cannot exist.
-- **Existing evidence:** `apps/api/src/composition/investigation.integration.test.ts` already proves this mechanism for
-  observations (domain rejection, and a raw SQL insert rejected with SQLSTATE 23503).
+- **Evidence:** `investigation-links.integration.test.ts` proves both layers: the domain rejection through the whole stack,
+  and raw SQL inserts that violate each composite key (SQLSTATE 23503). The check runs before the version comparison.
 
-## 6. Optimistic concurrency
+## 6. Optimistic concurrency and the Expected Version contract
 
-- **Policy (Q6):** only `investigation_case` is versioned. A mutating operation (linking) is saved with
-  `update ... set version = version + 1 where id = $1 and version = $2 returning version`; zero rows is a conflict, never a
-  silent overwrite. UUT and TestAttempt are immutable after creation and carry no version.
-- **Stale versus missing:** the repository distinguishes a stale version from a missing case by checking existence inside the
-  same transaction, so callers see `case_not_found` or `concurrency_conflict` and never a silent success.
-- **Transactions:** unchanged. The application owns the `TransactionScope`; the case update, the new link rows and the error
-  paths commit or roll back together.
-- **Retries:** the repository never retries. A caller that gets a conflict re-reads the authoritative state and
-  re-evaluates the operation itself; there are no hidden or unlimited retries.
+- **Policy (Q6):** only `investigation_case` is versioned. `linkAttempt` **requires `expectedVersion`** and follows this
+  precedence: (1) role, case, attempt and same-UUT validation; (2) one-statement read of the authoritative case; (3) compare
+  `expectedVersion` with the stored version; (4) a difference is `concurrency_conflict`, **even when the identical link
+  already exists**; (5) a match plus an existing identical link is an idempotent success with no write and no version change;
+  (6) a match plus a new link stores the link and increments the version atomically.
+- **Atomicity:** the new link is stored with `update ... set version = version + 1 where id = $1 and version = $2 returning
+version` followed by the link insert, in one transaction. Zero rows is a conflict, never a silent overwrite. A link is never
+  committed without its version increment and the reverse. UUT and TestAttempt are immutable and carry no version.
+- **Concurrent writers:** two writers that both read version N: the first to take the row lock wins; the second matches no row
+  and is rejected deterministically. This holds for identical and for different link requests.
+- **Transactions:** unchanged. The application owns the `TransactionScope`; a failed transaction is rolled back before
+  anything else happens.
+- **Retries:** none, anywhere. After a conflict the caller re-reads the case and decides again with the new version; a
+  stale-version request stays a conflict until it is re-based.
 
 ## 7. Deterministic query ordering
 
@@ -87,11 +93,12 @@ Enforced twice, by the same mechanism that already protects observations in `000
 ## 7a. Timestamps
 
 - **Policy (Q10):** `uut.created_at`, `test_attempt.registered_at`, `investigation_case.opened_at` and
-  `case_test_attempt_link.linked_at`, all `timestamptz` with `default now()`. **PostgreSQL generates them**; the adapter never writes these
-  columns, no command or option of the module carries one, and the stored row is returned to the caller, so no caller can
-  choose or override a timestamp (clarification addendum D). They are exchanged as ISO-8601 UTC (`...Z`). They record when
-  SDRIS created or registered the record; they are not external execution times and not audit history (S0-06). Equal
-  timestamps are allowed: every ordering adds deterministic keys (`attempt_id`, role rank).
+  `case_test_attempt_link.linked_at`, all `timestamptz` with UTC semantics, **supplied by one injected application clock**
+  (`now` in the service dependencies; the composition factory takes it as an option, production uses the system clock). No
+  public command carries a timestamp, so no caller can choose or override one. The domain and the database schema use no
+  database time function: the columns have no default. They are exchanged as ISO-8601 UTC (`...Z`) and stored with
+  millisecond precision. They record when SDRIS created or registered the record; they are not external execution times and
+  not audit history (S0-06). Equal timestamps are allowed: every ordering adds deterministic keys (`attempt_id`, role rank).
 
 ## 8. Schema (mirrors migration 0002)
 
@@ -100,7 +107,7 @@ create table investigation.uut (
   id            uuid primary key,
   serial_number text,                 -- optional, stored as given, not unique
   hostname      text,                 -- optional, stored as given, not unique
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null
 );
 
 create table investigation.test_attempt (
@@ -108,14 +115,14 @@ create table investigation.test_attempt (
   uut_id                       uuid not null references investigation.uut (id),
   stage                        text not null check (stage in ('IST', 'SAT')),
   external_execution_reference text,  -- optional, stored as given, not unique
-  registered_at                timestamptz not null default now(),
+  registered_at                timestamptz not null,
   constraint test_attempt_id_uut_key unique (id, uut_id)
 );
 
 create table investigation.investigation_case (
   id        uuid primary key,
   uut_id    uuid not null references investigation.uut (id),
-  opened_at timestamptz not null default now(),
+  opened_at timestamptz not null,
   version   integer not null default 1 check (version >= 1),
   constraint investigation_case_id_uut_key unique (id, uut_id)
 );
@@ -125,7 +132,7 @@ create table investigation.case_test_attempt_link (
   attempt_id uuid not null,
   uut_id     uuid not null,
   role       text not null check (role in ('INITIAL_FAILURE', 'RETEST', 'SUPPORTING', 'CONTEXT')),
-  linked_at  timestamptz not null default now(),
+  linked_at  timestamptz not null,
   primary key (case_id, attempt_id, role),
   foreign key (case_id, uut_id)    references investigation.investigation_case (id, uut_id),
   foreign key (attempt_id, uut_id) references investigation.test_attempt (id, uut_id)
@@ -136,21 +143,21 @@ UUT, TestAttempt and link rows are also protected against `UPDATE` by a trigger,
 
 ## 9. Constraints that will and will not exist
 
-| Constraint                                             | Exists | Why                                                           |
-| ------------------------------------------------------ | ------ | ------------------------------------------------------------- |
-| Primary keys on the three entities and on the link key | yes    | Identity (UUIDv7) and the link key (Q5)                       |
-| `unique (id, uut_id)` on case and attempt              | yes    | Supports the same-UUT foreign keys                            |
-| Composite foreign keys on the link                     | yes    | Same-UUT protection at database level                         |
-| Foreign keys from case and attempt to `uut`            | yes    | Existence of the UUT inside the context (Q2)                  |
-| `check (role in (...))`, `check (stage in (...))`      | yes    | Controlled vocabularies approved in Q4 and Q5                 |
-| `check (version >= 1)` on the case                     | yes    | Optimistic concurrency                                        |
-| No-update triggers on uut, test_attempt, link          | yes    | Immutability (Q4, Q5, Q6)                                     |
-| Timestamp columns, `not null`, `timestamptz`           | yes    | Q10                                                           |
-| Uniqueness of serial number or hostname                | **no** | Specification forbids treating them as authoritative identity |
-| Uniqueness of the external execution reference         | **no** | Q4                                                            |
-| Limit on links per role                                | **no** | Q5 allows several `INITIAL_FAILURE` links                     |
-| Any `check` on the content of text attributes          | **no** | No limits, trimming or normalisation may be invented          |
-| Status or lifecycle columns                            | **no** | Q7: no lifecycle state machine in this task                   |
+| Constraint                                               | Exists | Why                                                           |
+| -------------------------------------------------------- | ------ | ------------------------------------------------------------- |
+| Primary keys on the three entities and on the link key   | yes    | Identity (UUIDv7) and the link key (Q5)                       |
+| `unique (id, uut_id)` on case and attempt                | yes    | Supports the same-UUT foreign keys                            |
+| Composite foreign keys on the link                       | yes    | Same-UUT protection at database level                         |
+| Foreign keys from case and attempt to `uut`              | yes    | Existence of the UUT inside the context (Q2)                  |
+| `check (role in (...))`, `check (stage in (...))`        | yes    | Controlled vocabularies approved in Q4 and Q5                 |
+| `check (version >= 1)` on the case                       | yes    | Optimistic concurrency                                        |
+| No-update triggers on uut, test_attempt, link            | yes    | Immutability (Q4, Q5, Q6)                                     |
+| Timestamp columns, `not null`, `timestamptz`, no default | yes    | Q10: one injected clock, no database time function            |
+| Uniqueness of serial number or hostname                  | **no** | Specification forbids treating them as authoritative identity |
+| Uniqueness of the external execution reference           | **no** | Q4                                                            |
+| Limit on links per role                                  | **no** | Q5 allows several `INITIAL_FAILURE` links                     |
+| Any `check` on the content of text attributes            | **no** | No limits, trimming or normalisation may be invented          |
+| Status or lifecycle columns                              | **no** | Q7: no lifecycle state machine in this task                   |
 
 ## 10. Migration policy (decided)
 

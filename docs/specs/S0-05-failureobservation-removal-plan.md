@@ -1,6 +1,6 @@
 # S0-05 — FailureObservation Removal Plan
 
-**Status:** APPROVED by the Engineering Owner (Q8, [approval record](S0-05-owner-approval.md)) and executed in the commits
+**Status:** APPROVED by the Engineering Owner (Q8, [final approval](S0-05-final-owner-approval.md)) and executed in the commits
 of PR #6 in the order below. `FailureObservation` is deferred by section 9 of the
 [S0-05 specification](S0-05-investigation-aggregate-foundation.md); it is replaced by `CaseTestAttemptLink` first and removed
 afterwards.
@@ -156,3 +156,7 @@ attempt does not exist. Removed without a link equivalent: "description stored e
 attempt attributes stored exactly as given) and "observation addressed to a different case" (no equivalent concept: a link
 is addressed by the case id). The `0001` migration and its schema comment, which still mention "failure observations" as the
 intended future content of the `investigation` schema, are published and were not changed.
+
+The removal is unaffected by the later contract changes (injected clock, mandatory `expectedVersion`): the replacement proofs
+were re-based on `linkAttempt`, and stale-version and idempotency scenarios were added to them. Historical design knowledge
+(the observation model and its proofs) is kept in this document, sections 3 and 4.

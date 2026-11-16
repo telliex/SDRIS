@@ -195,20 +195,22 @@ Status line updated in commit: ______________
 
 ## 6. S0-05 Domain Specification
 
-Commit: `0252689`. **The Engineering Owner approved this specification WITH CHANGES** (Q1); see
-[S0-05-owner-approval.md](../specs/S0-05-owner-approval.md). The amendments are committed and verified against the decision
-record in the [register traceability table](../specs/S0-05-owner-decision-register.md). The remaining gates concern the
-ADRs and the final acceptance.
+Commit: `0252689`. **The Engineering Owner approved this specification WITH CHANGES** (Q1) in the
+[final approval v1.0](../specs/S0-05-final-owner-approval.md), which supersedes every earlier approval draft and addendum.
+The specification, the register, the persistence policy and the removal plan are updated to it; the register's
+[consistency check](../specs/S0-05-owner-decision-register.md) lists the contradictions found and resolved, and its
+traceability table maps each decision to implementation and tests. Domain approval does not approve any ADR (final approval
+section 6): the gates below concern the ADRs and the final acceptance.
 
-| Gate before approval                                                                                   | State                                | Owner confirms |
-| ------------------------------------------------------------------------------------------------------ | ------------------------------------ | -------------- |
-| All ten questions answered in the register                                                             | done (Owner, approval record)        | ☑              |
-| The answers written into the specification (amended specification committed)                           | done (`814e8d3`)                     | ☐              |
-| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | done (Q8)                            | ☑              |
-| Removal plan for FailureObservation approved (Q8)                                                      | done, executed (`4425dca`)           | ☑              |
-| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | updated to the decisions (`814e8d3`) | ☐              |
-| ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)                 | open: all remain PROPOSED            | ☐              |
-| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open: Owner confirms                 | ☐              |
+| Gate before approval                                                                                   | State                                               | Owner confirms |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | -------------- |
+| All ten questions answered in the register                                                             | done (final approval v1.0)                          | ☑              |
+| The answers written into the specification, register, persistence policy and removal plan              | done, contradictions checked                        | ☐              |
+| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | done (Q8)                                           | ☑              |
+| Removal plan for FailureObservation approved (Q8)                                                      | done, executed (`4425dca`)                          | ☑              |
+| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | updated to the final approval                       | ☐              |
+| ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)                 | open: all remain PROPOSED, each approved separately | ☐              |
+| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open: Owner confirms                                | ☐              |
 
 **Known gaps at this point:** acceptance 11 (Codex review of the final head) and 12 (Owner acceptance) are pending.
 Criteria 1 to 3 are met by the implementation; 7 and 8 are met by A4 and A3.
