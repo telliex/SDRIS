@@ -10,7 +10,7 @@ import type {
   Uut,
 } from '@sdris/investigation';
 import { createInvestigationModule } from '@sdris/investigation/composition';
-import { createEntityRef, newEntityId } from '@sdris/shared-kernel';
+import { createEntityRef, newEntityId, parseTimestamp } from '@sdris/shared-kernel';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -81,6 +81,28 @@ describe('Investigation links through the apps/api composition root (real Postgr
     assert.ok(result.ok, JSON.stringify(result));
     return result.value;
   };
+  /**
+   * Links with the version the caller would currently see (a fresh read). Tests that are about versions pass
+   * `expectedVersion` explicitly through `service.linkAttempt` instead.
+   */
+  const linkNow = async (input: { caseId: string; attemptId: string; role: string }) =>
+    service.linkAttempt({
+      caseId: input.caseId as never,
+      attemptId: input.attemptId as never,
+      role: input.role,
+      expectedVersion: await caseVersion(input.caseId),
+    });
+  /** Links asserting that the caller last saw the case at exactly `expectedVersion`. */
+  const linkAt = (
+    expectedVersion: number,
+    input: { caseId: string; attemptId: string; role: string },
+  ) =>
+    service.linkAttempt({
+      caseId: input.caseId as never,
+      attemptId: input.attemptId as never,
+      role: input.role,
+      expectedVersion,
+    });
   /** A fresh UUT with one case and one attempt of that UUT. */
   const scenario = async () => {
     const u = await uut();
@@ -118,57 +140,66 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.equal((await service.getUut(empty.id))?.serialNumber, '');
     });
 
-    it('generates every timestamp in PostgreSQL as a UTC instant, and callers cannot supply or override one', async () => {
-      const dbNow = async () =>
-        new Date((await sql('select clock_timestamp() as t'))[0].t as Date).getTime();
-      const within = (stamp: string, from: number, to: number) => {
-        const at = Date.parse(stamp);
-        assert.ok(at >= from - 1 && at <= to + 1, `${stamp} not within the database clock window`);
-        assert.match(stamp, /Z$/, 'unambiguous UTC');
+    it('persists the timestamps of one injected application clock as UTC instants, and commands cannot override them', async () => {
+      const instants = [
+        '2026-11-15T08:00:00.123Z',
+        '2026-11-15T08:00:01.456Z',
+        '2026-11-15T08:00:02.789Z',
+        '2026-11-15T08:00:03.012Z',
+      ];
+      let reads = 0;
+      const clock = () => {
+        const parsed = parseTimestamp(instants[reads] ?? instants.at(-1)!);
+        reads += 1;
+        if (!parsed.ok) throw new Error('bad clock');
+        return parsed.value;
       };
+      const timed = createInvestigationModule(createPersistenceHandle(target.connection), {
+        now: clock,
+      }).service;
       const forged = '2001-01-01T00:00:00.000Z';
-      const from = await dbNow();
-      // A caller trying to choose the timestamp: extra fields are not part of any command and are ignored.
-      const u = await service.registerUut({ createdAt: forged } as never);
+      // A caller trying to choose a timestamp: extra fields are not part of any command and are ignored.
+      const u = await timed.registerUut({ createdAt: forged } as never);
       assert.ok(u.ok);
-      const a = await service.registerTestAttempt({
+      const a = await timed.registerTestAttempt({
         uutId: u.value.id,
         stage: 'IST',
         registeredAt: forged,
       } as never);
       assert.ok(a.ok);
-      const opened = await service.openCase({ uut: refOf(u.value), openedAt: forged } as never);
+      const opened = await timed.openCase({ uut: refOf(u.value), openedAt: forged } as never);
       assert.ok(opened.ok);
-      const linked = await service.linkTestAttempt({
+      const linked = await timed.linkAttempt({
         caseId: opened.value.id,
         attemptId: a.value.id,
         role: 'RETEST',
+        expectedVersion: 1,
         linkedAt: forged,
       } as never);
       assert.ok(linked.ok);
-      const to = await dbNow();
-      within(u.value.createdAt, from, to);
-      within(a.value.registeredAt, from, to);
-      within(opened.value.openedAt, from, to);
-      within(linked.value.link.linkedAt, from, to);
-      // what is stored is what was returned, and the column types are timezone-aware
-      const loaded = await service.getCase(opened.value.id);
-      assert.equal(loaded?.openedAt, opened.value.openedAt);
-      assert.equal(loaded?.links[0]?.linkedAt, linked.value.link.linkedAt);
+      assert.equal(u.value.createdAt, instants[0]);
+      assert.equal(a.value.registeredAt, instants[1]);
+      assert.equal(opened.value.openedAt, instants[2]);
+      assert.equal(linked.value.link.linkedAt, instants[3]);
+      // what is stored is exactly what the clock supplied, read back through the port, as UTC instants
+      assert.equal((await timed.getUut(u.value.id))?.createdAt, instants[0]);
+      assert.equal((await timed.getTestAttempt(a.value.id))?.registeredAt, instants[1]);
+      const loaded = await timed.getCase(opened.value.id);
+      assert.equal(loaded?.openedAt, instants[2]);
+      assert.equal(loaded?.links[0]?.linkedAt, instants[3]);
+      const stored = await sql(
+        `select to_char(u.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as created,
+                to_char(l.linked_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as linked
+           from investigation.uut u, investigation.case_test_attempt_link l where u.id = $1 and l.case_id = $2`,
+        [u.value.id, opened.value.id],
+      );
+      assert.deepEqual(stored[0], { created: instants[0], linked: instants[3] });
       const types = await sql(
-        `select table_name, column_name, data_type from information_schema.columns
-         where table_schema = 'investigation' and column_name in ('created_at','registered_at','opened_at','linked_at') order by 1, 2`,
+        `select data_type from information_schema.columns
+         where table_schema = 'investigation' and column_name in ('created_at','registered_at','opened_at','linked_at')`,
       );
       assert.equal(types.length, 4);
       assert.ok(types.every((t) => t.data_type === 'timestamp with time zone'));
-      const defaults = await sql(
-        `select column_default from information_schema.columns
-         where table_schema = 'investigation' and column_name in ('created_at','registered_at','opened_at','linked_at')`,
-      );
-      assert.ok(
-        defaults.every((d) => d.column_default === 'now()'),
-        'generated by the database',
-      );
     });
 
     it('returns undefined for an unknown UUT', async () => {
@@ -279,7 +310,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
 
     it('keeps UUT, attempt and link rows immutable (database trigger)', async () => {
       const { u, c, a } = await scenario();
-      await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      await linkNow({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
       assert.equal(
         await rawCode('update investigation.uut set serial_number = $2 where id = $1', [u.id, 'x']),
         RAW_RESTRICT,
@@ -302,7 +333,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
   describe('linking', () => {
     it('links an attempt, increments the version and reads the link back with its role and linked_at', async () => {
       const { c, a } = await scenario();
-      const result = await service.linkTestAttempt({
+      const result = await linkNow({
         caseId: c.id,
         attemptId: a.id,
         role: 'INITIAL_FAILURE',
@@ -321,7 +352,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('is idempotent: an identical repeat changes nothing, not even the version or linked_at', async () => {
       const { c, a } = await scenario();
       const command = { caseId: c.id, attemptId: a.id, role: 'RETEST' };
-      const first = await service.linkTestAttempt(command);
+      const first = await linkNow(command);
       assert.ok(first.ok);
       const before = await counts();
       const [rowBefore] = await sql(
@@ -329,7 +360,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         [c.id],
       );
       for (let n = 0; n < 3; n += 1) {
-        const again = await service.linkTestAttempt(command);
+        const again = await linkNow(command);
         assert.ok(again.ok && !again.value.created && again.value.version === 2);
         assert.equal(again.value.link.linkedAt, first.value.link.linkedAt);
       }
@@ -345,11 +376,11 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('permits several roles for one case-attempt pair and several INITIAL_FAILURE links', async () => {
       const { u, c, a } = await scenario();
       for (const role of ['INITIAL_FAILURE', 'RETEST', 'SUPPORTING', 'CONTEXT']) {
-        const r = await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role });
+        const r = await linkNow({ caseId: c.id, attemptId: a.id, role });
         assert.ok(r.ok && r.value.created, role);
       }
       const second = await attempt(u);
-      const more = await service.linkTestAttempt({
+      const more = await linkNow({
         caseId: c.id,
         attemptId: second.id,
         role: 'INITIAL_FAILURE',
@@ -368,9 +399,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const [a1, a2] = [await attempt(u), await attempt(u)];
       for (const c of [caseA, caseB]) {
         for (const a of [a1, a2]) {
-          assert.ok(
-            (await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'CONTEXT' })).ok,
-          );
+          assert.ok((await linkNow({ caseId: c.id, attemptId: a.id, role: 'CONTEXT' })).ok);
         }
       }
       assert.equal((await service.getCase(caseA.id))?.links.length, 2);
@@ -405,7 +434,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         [tieOne, 'RETEST'],
       ];
       for (const [attemptId, role] of plan) {
-        const r = await service.linkTestAttempt({
+        const r = await linkNow({
           caseId: opened.id,
           attemptId: attemptId as never,
           role,
@@ -449,22 +478,74 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.deepEqual(again?.links, loaded?.links, 'stable across repeated reads');
     });
 
+    it('matching version and identical link: idempotent success, version and stored link untouched', async () => {
+      const { c, a } = await scenario();
+      const first = await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' });
+      assert.ok(first.ok && first.value.created && first.value.version === 2);
+      const [rowBefore] = await sql(
+        'select * from investigation.case_test_attempt_link where case_id = $1',
+        [c.id],
+      );
+      const again = await linkAt(2, { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' });
+      assert.ok(again.ok && !again.value.created && again.value.version === 2);
+      assert.equal(again.value.link.linkedAt, first.value.link.linkedAt);
+      assert.equal(await caseVersion(c.id), 2);
+      const [rowAfter] = await sql(
+        'select * from investigation.case_test_attempt_link where case_id = $1',
+        [c.id],
+      );
+      assert.deepEqual(rowAfter, rowBefore);
+    });
+
+    it('stale version beats idempotency: the identical, already existing link still gets concurrency_conflict', async () => {
+      const { c, a } = await scenario();
+      assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
+      const stale = await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+      assert.equal(stale.error.details?.expectedVersion, 1);
+      assert.equal(stale.error.details?.actualVersion, 2);
+      assert.equal(await caseVersion(c.id), 2);
+      assert.equal((await service.getCase(c.id))?.links.length, 1);
+    });
+
+    it('a stale version for a new link is a conflict that stores nothing; a version from the future is one too', async () => {
+      const { u, c, a } = await scenario();
+      const b = await attempt(u);
+      assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' })).ok);
+      const before = await counts();
+      const stale = await linkAt(1, { caseId: c.id, attemptId: b.id, role: 'RETEST' });
+      const future = await linkAt(9, { caseId: c.id, attemptId: b.id, role: 'RETEST' });
+      for (const r of [stale, future]) {
+        assert.ok(!r.ok && r.error.code === 'investigation.concurrency_conflict');
+      }
+      assert.deepEqual(await counts(), before);
+      assert.equal(await caseVersion(c.id), 2);
+    });
+
+    it('checks existence and same-UUT ownership before the version: a stale cross-UUT request is uut_mismatch', async () => {
+      const { c } = await scenario();
+      const foreign = await attempt(await uut());
+      const result = await linkAt(99, { caseId: c.id, attemptId: foreign.id, role: 'SUPPORTING' });
+      assert.ok(!result.ok && result.error.code === 'investigation.uut_mismatch');
+      assert.equal(await caseVersion(c.id), 1);
+    });
+
     it('reports an unknown case or attempt and writes nothing', async () => {
       const { c, a } = await scenario();
       const before = await counts();
-      const noCase = await service.linkTestAttempt({
+      const noCase = await linkAt(1, {
         caseId: newEntityId<'InvestigationCase'>(),
         attemptId: a.id,
         role: 'RETEST',
       });
       assert.ok(!noCase.ok && noCase.error.code === 'investigation.case_not_found');
-      const noAttempt = await service.linkTestAttempt({
+      const noAttempt = await linkNow({
         caseId: c.id,
         attemptId: newEntityId<'TestAttempt'>(),
         role: 'RETEST',
       });
       assert.ok(!noAttempt.ok && noAttempt.error.code === 'investigation.attempt_not_found');
-      const badRole = await service.linkTestAttempt({
+      const badRole = await linkNow({
         caseId: c.id,
         attemptId: a.id,
         role: 'retest',
@@ -480,7 +561,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const { c } = await scenario();
       const foreign = await attempt(await uut());
       const before = await counts();
-      const result = await service.linkTestAttempt({
+      const result = await linkNow({
         caseId: c.id,
         attemptId: foreign.id,
         role: 'SUPPORTING',
@@ -522,7 +603,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
   describe('link uniqueness and vocabulary (database)', () => {
     it('enforces unique (case_id, attempt_id, role) and the role vocabulary', async () => {
       const { c, a } = await scenario();
-      await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      await linkNow({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
       const insert = (role: string) =>
         rawCode(
           'insert into investigation.case_test_attempt_link (case_id, attempt_id, uut_id, role, linked_at) values ($1, $2, $3, $4, now())',
@@ -537,7 +618,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
   describe('transaction commit and rollback', () => {
     it('commits the version bump and the link together', async () => {
       const { c, a } = await scenario();
-      await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' });
+      await linkNow({ caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' });
       assert.equal(await caseVersion(c.id), 2);
       const links = await sql(
         'select attempt_id from investigation.case_test_attempt_link where case_id = $1',
@@ -549,7 +630,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('rolls back everything when the domain rejects the command', async () => {
       const { c } = await scenario();
       const foreign = await attempt(await uut());
-      await service.linkTestAttempt({ caseId: c.id, attemptId: foreign.id, role: 'RETEST' });
+      await linkNow({ caseId: c.id, attemptId: foreign.id, role: 'RETEST' });
       assert.equal(await caseVersion(c.id), 1);
       assert.equal((await service.getCase(c.id))?.links.length, 0);
     });
@@ -563,9 +644,8 @@ describe('Investigation links through the apps/api composition root (real Postgr
         'create trigger reject_link before insert on investigation.case_test_attempt_link for each row execute function investigation.reject_link()',
       );
       try {
-        await assert.rejects(
-          service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' }),
-          (error) => causedBy(error, /injected link failure/),
+        await assert.rejects(linkNow({ caseId: c.id, attemptId: a.id, role: 'RETEST' }), (error) =>
+          causedBy(error, /injected link failure/),
         );
       } finally {
         await sql('drop trigger reject_link on investigation.case_test_attempt_link');
@@ -601,9 +681,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const { u, c } = await scenario();
       const attempts = await Promise.all(Array.from({ length: 10 }, () => attempt(u)));
       const results = await Promise.all(
-        attempts.map((a) =>
-          service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'SUPPORTING' }),
-        ),
+        attempts.map((a) => linkNow({ caseId: c.id, attemptId: a.id, role: 'SUPPORTING' })),
       );
       const succeeded = results.filter((r) => r.ok);
       assert.ok(
@@ -628,7 +706,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
           'update investigation.investigation_case set version = version + 1 where id = $1',
           [c.id],
         );
-        const writer = service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+        const writer = linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
         for (let waited = 0; ; waited += 10) {
           const blocked = await sql(
             "select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'",
@@ -657,14 +735,12 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('re-reads and re-evaluates on retry: a duplicate that lost the race becomes an idempotent no-op', async () => {
       const { c, a } = await scenario();
       const command = { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' };
-      const results = await Promise.all(
-        Array.from({ length: 8 }, () => service.linkTestAttempt(command)),
-      );
+      const results = await Promise.all(Array.from({ length: 8 }, () => linkNow(command)));
       for (const r of results) {
         if (!r.ok) assert.equal(r.error.code, 'investigation.concurrency_conflict');
       }
       // the caller retries, re-reading authoritative state
-      const retry = await service.linkTestAttempt(command);
+      const retry = await linkNow(command);
       assert.ok(retry.ok && !retry.value.created, 'already linked: idempotent');
       const loaded = await service.getCase(c.id);
       assert.equal(loaded?.links.length, 1);
@@ -679,7 +755,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         for (let n = 0; n < each;) {
           const a = await attempt(u);
           for (;;) {
-            const r = await service.linkTestAttempt({
+            const r = await linkNow({
               caseId: c.id,
               attemptId: a.id,
               role: 'SUPPORTING',
@@ -747,19 +823,25 @@ describe('Investigation links through the apps/api composition root (real Postgr
       );
     });
 
-    it('reports an idempotent duplicate with the version it really has, never a stale one', async () => {
+    it('reads one snapshot for the duplicate check: expected version 2 after the racing commit is an idempotent success at version 2', async () => {
       const { c, a } = await scenario();
       const result = await readWhileAnotherWriterCommitsALink(c, a, () =>
-        service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' }),
+        linkAt(2, { caseId: c.id, attemptId: a.id, role: 'RETEST' }),
       );
-      // Either the writer's link was already visible (idempotent, version 2) or the call lost the race and must be a
-      // conflict that the caller retries; it must never claim "already linked" together with version 1.
-      if (result.ok) {
-        assert.equal(result.value.created, false);
-        assert.equal(result.value.version, 2);
-      } else {
-        assert.equal(result.error.code, 'investigation.concurrency_conflict');
-      }
+      assert.ok(
+        result.ok && !result.value.created && result.value.version === 2,
+        JSON.stringify(result),
+      );
+      assert.equal(await caseVersion(c.id), 2, 'no increment for the idempotent no-op');
+    });
+
+    it('in the same race, the old expected version 1 is a concurrency conflict even though the link now exists', async () => {
+      const { c, a } = await scenario();
+      const result = await readWhileAnotherWriterCommitsALink(c, a, () =>
+        linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' }),
+      );
+      assert.ok(!result.ok && result.error.code === 'investigation.concurrency_conflict');
+      assert.equal(result.error.details?.actualVersion, 2);
       assert.equal(await caseVersion(c.id), 2);
     });
 
@@ -774,7 +856,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
           `insert into investigation.case_test_attempt_link (case_id, attempt_id, uut_id, role, linked_at) values ($1, $2, $3, 'RETEST', now())`,
           [c.id, a.id, c.uut.id],
         );
-        const writer = service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+        const writer = linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
         const outcome = writer.then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
@@ -809,7 +891,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         1,
       );
       // after the raw row is committed the same request is a plain idempotent duplicate
-      const retry = await service.linkTestAttempt({
+      const retry = await linkNow({
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -853,8 +935,8 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const { c, a } = await scenario();
       const command = { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' };
       const results = await writersBehindARowLock(c, [
-        () => service.linkTestAttempt(command),
-        () => service.linkTestAttempt(command),
+        () => linkAt(1, command),
+        () => linkAt(1, command),
       ]);
       const created = results.filter((r) => r.ok && r.value.created);
       const conflicts = results.filter(
@@ -867,8 +949,11 @@ describe('Investigation links through the apps/api composition root (real Postgr
         'the other had decided on a stale version and was rejected',
       );
       assert.equal(await caseVersion(c.id), 2, 'one new link, one version increment');
-      // the loser re-reads the authoritative state and re-evaluates: now an idempotent success
-      const retry = await service.linkTestAttempt(command);
+      // the stale request stays stale: Expected Version takes precedence even though the link now exists
+      const stillStale = await linkAt(1, command);
+      assert.ok(!stillStale.ok && stillStale.error.code === 'investigation.concurrency_conflict');
+      // the loser re-reads the authoritative state (version 2) and re-evaluates: now an idempotent success
+      const retry = await linkAt(2, command);
       assert.ok(retry.ok && !retry.value.created && retry.value.version === 2);
       assert.equal((await service.getCase(c.id))?.links.length, 1);
       assert.equal(
@@ -884,8 +969,8 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const first = { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' };
       const second = { caseId: c.id, attemptId: b.id, role: 'RETEST' };
       const results = await writersBehindARowLock(c, [
-        () => service.linkTestAttempt(first),
-        () => service.linkTestAttempt(second),
+        () => linkAt(1, first),
+        () => linkAt(1, second),
       ]);
       assert.equal(results.filter((r) => r.ok).length, 1);
       const loser = results.findIndex((r) => !r.ok);
@@ -898,7 +983,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         'the stale writer stored nothing',
       );
       assert.equal(await caseVersion(c.id), 2);
-      const retried = await service.linkTestAttempt(loser === 0 ? first : second);
+      const retried = await linkAt(2, loser === 0 ? first : second);
       assert.ok(retried.ok && retried.value.created && retried.value.version === 3);
       const loaded = await service.getCase(c.id);
       assert.equal(loaded?.links.length, 2);
@@ -907,7 +992,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
 
     it('rejects a stale write at the database boundary: the version predicate is atomic', async () => {
       const { c, a } = await scenario();
-      await service.linkTestAttempt({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      await linkNow({ caseId: c.id, attemptId: a.id, role: 'RETEST' });
       const stale = await sql(
         'update investigation.investigation_case set version = version + 1 where id = $1 and version = $2 returning version',
         [c.id, 1],

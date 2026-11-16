@@ -5,6 +5,7 @@ import {
   type EntityId,
   type Result,
   type SdrisError,
+  type Timestamp,
 } from '@sdris/shared-kernel';
 import {
   linkTestAttempt,
@@ -71,20 +72,34 @@ export interface InvestigationService {
   getCase(id: InvestigationCaseId): Promise<InvestigationCase | undefined>;
 
   /**
-   * Links an attempt to a case under the given role. Idempotent for an identical (case, attempt, role); the same
-   * attempt with another role is another link. Refuses an attempt of another UUT.
+   * Links an attempt to a case under the given role, for a caller that last saw the case at `expectedVersion`
+   * (Owner decision Q6, mandatory). In this order:
+   *
+   * 1. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
+   *    `uut_mismatch`);
+   * 2. the authoritative version is compared with `expectedVersion`; a difference is a `concurrency_conflict`, **even
+   *    when the identical link already exists** (Expected Version takes precedence over idempotency);
+   * 3. when the versions match and the identical (case, attempt, role) link exists, the existing link is returned and
+   *    nothing is written (`created: false`, version unchanged);
+   * 4. when the versions match and the link is new, it is stored and the version is incremented atomically.
+   *
+   * The service never retries: after a conflict the caller re-reads the case and decides again. The same attempt with
+   * another role is another link.
    */
-  linkTestAttempt(command: {
+  linkAttempt(command: {
     readonly caseId: InvestigationCaseId;
     readonly attemptId: TestAttemptId;
     /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
     readonly role: string;
+    /** The case version the caller based this request on. Required. */
+    readonly expectedVersion: number;
   }): Promise<Result<LinkResult, InvestigationServiceError>>;
 }
 
 export interface InvestigationServiceDependencies {
   readonly repository: InvestigationRepository;
   readonly transactions: TransactionScope;
+  readonly now: () => Timestamp;
   readonly newId: <TType extends string>() => EntityId<TType>;
 }
 
@@ -129,15 +144,14 @@ export function createInvestigationService(
   return {
     registerUut: (command) =>
       transactional(async (tx) => {
-        // Callers cannot supply a timestamp: PostgreSQL generates `created_at` and the stored UUT is returned.
-        return deps.repository.addUut(
-          createUut({
-            id: deps.newId<'UUT'>(),
-            ...(command.serialNumber === undefined ? {} : { serialNumber: command.serialNumber }),
-            ...(command.hostname === undefined ? {} : { hostname: command.hostname }),
-          }),
-          tx,
-        );
+        const created = createUut({
+          id: deps.newId<'UUT'>(),
+          ...(command.serialNumber === undefined ? {} : { serialNumber: command.serialNumber }),
+          ...(command.hostname === undefined ? {} : { hostname: command.hostname }),
+          createdAt: deps.now(),
+        });
+        const added = await deps.repository.addUut(created, tx);
+        return added.ok ? ok(created) : err(added.error);
       }),
 
     getUut: (id) => deps.repository.getUut(id),
@@ -155,8 +169,10 @@ export function createInvestigationService(
           ...(command.externalExecutionReference === undefined
             ? {}
             : { externalExecutionReference: command.externalExecutionReference }),
+          registeredAt: deps.now(),
         });
-        return deps.repository.addTestAttempt(registered, tx);
+        const added = await deps.repository.addTestAttempt(registered, tx);
+        return added.ok ? ok(registered) : err(added.error);
       }),
 
     getTestAttempt: (id) => deps.repository.getTestAttempt(id),
@@ -165,15 +181,18 @@ export function createInvestigationService(
       transactional(async (tx) => {
         const owner = await deps.repository.getUut(command.uut.id, tx);
         if (!owner) return notFound('investigation.uut_not_found', 'UUT', command.uut.id);
-        return deps.repository.add(
-          openCase({ id: deps.newId<'InvestigationCase'>(), uut: command.uut }),
-          tx,
-        );
+        const created = openCase({
+          id: deps.newId<'InvestigationCase'>(),
+          uut: command.uut,
+          openedAt: deps.now(),
+        });
+        const added = await deps.repository.add(created, tx);
+        return added.ok ? ok(created) : err(added.error);
       }),
 
     getCase: (id) => deps.repository.get(id),
 
-    linkTestAttempt: (command) =>
+    linkAttempt: (command) =>
       transactional<LinkResult>(async (tx) => {
         const role = parseLinkRole(command.role);
         if (!role.ok) return err(role.error);
@@ -183,19 +202,30 @@ export function createInvestigationService(
         if (!attempt) {
           return notFound('investigation.attempt_not_found', 'test attempt', command.attemptId);
         }
-        const outcome = linkTestAttempt(current, attempt, role.value);
+        const outcome = linkTestAttempt(current, attempt, role.value, deps.now());
         if (!outcome.ok) return err(outcome.error);
+        // Expected Version takes precedence over duplicate-link idempotency (Owner decision Q6).
+        if (current.version !== command.expectedVersion) {
+          return err(
+            createError({
+              code: 'investigation.concurrency_conflict' as const,
+              message:
+                'The case is not at the version the request was based on; re-read the case and decide again.',
+              details: { expectedVersion: command.expectedVersion, actualVersion: current.version },
+            }),
+          );
+        }
         if (!outcome.value.created) {
-          // Idempotent duplicate: nothing is written and the version does not advance.
+          // Versions match and the identical link exists: nothing is written and the version does not advance.
           return ok({
             version: current.version,
             link: outcome.value.link,
             created: false,
           });
         }
-        const saved = await deps.repository.addLink(current, outcome.value.link, tx);
+        const saved = await deps.repository.save(outcome.value.investigationCase, tx);
         return saved.ok
-          ? ok({ version: saved.value.version, link: saved.value.link, created: true })
+          ? ok({ version: saved.value.version, link: outcome.value.link, created: true })
           : err(saved.error);
       }),
   };

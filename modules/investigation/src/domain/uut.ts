@@ -10,16 +10,11 @@ import type { EntityId, EntityRef, Timestamp } from '@sdris/shared-kernel';
 export type UutId = EntityId<'UUT'>;
 export type UutRef = EntityRef<'UUT'>;
 
-/** A UUT that has not been stored yet. It carries no timestamp: PostgreSQL generates `created_at` on insert. */
-export interface NewUut {
+export interface Uut {
   readonly id: UutId;
   readonly serialNumber?: string;
   readonly hostname?: string;
-}
-
-/** A stored UUT. */
-export interface Uut extends NewUut {
-  /** When SDRIS recorded the UUT (database clock, UTC). Not a statement about the physical unit. */
+  /** When SDRIS created the record. Not a statement about the physical unit. */
   readonly createdAt: Timestamp;
 }
 
@@ -27,10 +22,12 @@ export function createUut(input: {
   readonly id: UutId;
   readonly serialNumber?: string;
   readonly hostname?: string;
-}): NewUut {
+  readonly createdAt: Timestamp;
+}): Uut {
   return Object.freeze({
     id: input.id,
     ...(input.serialNumber === undefined ? {} : { serialNumber: input.serialNumber }),
     ...(input.hostname === undefined ? {} : { hostname: input.hostname }),
+    createdAt: input.createdAt,
   });
 }

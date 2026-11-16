@@ -62,7 +62,7 @@ const causedBy = (error, pattern) => {
       path.join(repo, 'infrastructure', 'database', 'migrations'),
     );
     const { service } = composeInvestigation(target.connection);
-    check('composition returns a service', typeof service.linkTestAttempt === 'function');
+    check('composition returns a service', typeof service.linkAttempt === 'function');
 
     const registerUut = async () => {
       const result = await service.registerUut({ serialNumber: ' SN-SYNTHETIC ' });
@@ -97,19 +97,21 @@ const causedBy = (error, pattern) => {
     check('round trip', loaded && loaded.id === opened.value.id && loaded.version === 1);
 
     // commit: version bump and link together
-    const linked = await service.linkTestAttempt({
+    const linked = await service.linkAttempt({
       caseId: opened.value.id,
       attemptId: attempt.value.id,
       role: 'INITIAL_FAILURE',
+      expectedVersion: 1,
     });
     check('link test attempt', linked.ok && linked.value.version === 2 && linked.value.created);
     check('commit persisted both writes', (await caseCount(pool, 'case_test_attempt_link')) === 1);
 
     // idempotency: an identical repeat writes nothing and does not advance the version
-    const again = await service.linkTestAttempt({
+    const again = await service.linkAttempt({
       caseId: opened.value.id,
       attemptId: attempt.value.id,
       role: 'INITIAL_FAILURE',
+      expectedVersion: 2,
     });
     check(
       'identical link is idempotent',
@@ -121,15 +123,28 @@ const causedBy = (error, pattern) => {
         (await service.getCase(opened.value.id)).version === 2,
     );
 
+    // Expected Version beats idempotency: the same request at the old version 1 is a conflict although the link exists
+    const staleDuplicate = await service.linkAttempt({
+      caseId: opened.value.id,
+      attemptId: attempt.value.id,
+      role: 'INITIAL_FAILURE',
+      expectedVersion: 1,
+    });
+    check(
+      'stale version beats idempotency',
+      !staleDuplicate.ok && staleDuplicate.error.code === 'investigation.concurrency_conflict',
+    );
+
     // cross-UUT rejection stores nothing and does not advance the version
     const foreign = await service.registerTestAttempt({
       uutId: (await registerUut()).id,
       stage: 'SAT',
     });
-    const crossUut = await service.linkTestAttempt({
+    const crossUut = await service.linkAttempt({
       caseId: opened.value.id,
       attemptId: foreign.value.id,
       role: 'SUPPORTING',
+      expectedVersion: 2,
     });
     check(
       'cross-UUT rejected',
@@ -160,10 +175,11 @@ const causedBy = (error, pattern) => {
     );
     try {
       await assert.rejects(
-        service.linkTestAttempt({
+        service.linkAttempt({
           caseId: opened.value.id,
           attemptId: attempt.value.id,
           role: 'RETEST',
+          expectedVersion: 2,
         }),
         (error) => causedBy(error, /injected failure/),
       );
@@ -182,10 +198,11 @@ const causedBy = (error, pattern) => {
         'update investigation.investigation_case set version = version + 1 where id = $1',
         [opened.value.id],
       );
-      const stale = service.linkTestAttempt({
+      const stale = service.linkAttempt({
         caseId: opened.value.id,
         attemptId: attempt.value.id,
         role: 'RETEST',
+        expectedVersion: 2,
       });
       for (let waited = 0; ; waited += 10) {
         const blocked = await pool.query(
@@ -209,16 +226,16 @@ const causedBy = (error, pattern) => {
 
     // deterministic retrieval order: registered_at, attempt id, role
     const second = await service.registerTestAttempt({ uutId: unit.id, stage: 'SAT' });
+    let nextVersion = 3;
     for (const role of ['CONTEXT', 'RETEST', 'INITIAL_FAILURE']) {
-      assert.ok(
-        (
-          await service.linkTestAttempt({
-            caseId: opened.value.id,
-            attemptId: second.value.id,
-            role,
-          })
-        ).ok,
-      );
+      const result = await service.linkAttempt({
+        caseId: opened.value.id,
+        attemptId: second.value.id,
+        role,
+        expectedVersion: nextVersion,
+      });
+      assert.ok(result.ok);
+      nextVersion = result.value.version;
     }
     const ordered = (await service.getCase(opened.value.id)).links.map((l) => l.role);
     check(

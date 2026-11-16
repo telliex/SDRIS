@@ -1,5 +1,10 @@
 import type { PersistenceHandle } from '@sdris/database';
-import { newEntityId, type EntityId } from '@sdris/shared-kernel';
+import {
+  newEntityId,
+  timestampFromDate,
+  type EntityId,
+  type Timestamp,
+} from '@sdris/shared-kernel';
 import {
   createInvestigationService,
   type InvestigationService,
@@ -17,8 +22,17 @@ export interface InvestigationModule {
 }
 
 export interface InvestigationModuleOptions {
+  /** Clock override, mainly for tests. */
+  readonly now?: () => Timestamp;
   /** Identifier generator override, mainly for tests. */
   readonly newId?: <TType extends string>() => EntityId<TType>;
+}
+
+function systemNow(): Timestamp {
+  const result = timestampFromDate(new Date());
+  if (!result.ok)
+    throw new Error(`System clock produced an invalid timestamp: ${result.error.message}`);
+  return result.value;
 }
 
 export function createInvestigationModule(
@@ -29,6 +43,7 @@ export function createInvestigationModule(
     service: createInvestigationService({
       repository: new DrizzleInvestigationRepository(persistence),
       transactions: new PersistenceTransactionScope(persistence),
+      now: options.now ?? systemNow,
       newId: options.newId ?? newEntityId,
     }),
   };

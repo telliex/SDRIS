@@ -22,17 +22,12 @@ export type TestAttemptId = EntityId<'TestAttempt'>;
 export const TEST_STAGES = ['IST', 'SAT'] as const;
 export type TestStage = (typeof TEST_STAGES)[number];
 
-/** An attempt that has not been stored yet. PostgreSQL generates `registered_at` on insert. */
-export interface NewTestAttempt {
+export interface TestAttempt {
   readonly id: TestAttemptId;
   readonly uut: UutRef;
   readonly stage: TestStage;
   readonly externalExecutionReference?: string;
-}
-
-/** A stored attempt. */
-export interface TestAttempt extends NewTestAttempt {
-  /** When SDRIS registered the attempt (database clock, UTC). Not the time the external test ran. */
+  /** When SDRIS registered the attempt. Not the time the external test ran. */
   readonly registeredAt: Timestamp;
 }
 
@@ -60,7 +55,8 @@ export function registerTestAttempt(input: {
   readonly uut: UutRef;
   readonly stage: TestStage;
   readonly externalExecutionReference?: string;
-}): NewTestAttempt {
+  readonly registeredAt: Timestamp;
+}): TestAttempt {
   return Object.freeze({
     id: input.id,
     uut: input.uut,
@@ -68,5 +64,6 @@ export function registerTestAttempt(input: {
     ...(input.externalExecutionReference === undefined
       ? {}
       : { externalExecutionReference: input.externalExecutionReference }),
+    registeredAt: input.registeredAt,
   });
 }

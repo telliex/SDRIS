@@ -1,13 +1,7 @@
 import type { Result, SdrisError } from '@sdris/shared-kernel';
-import type {
-  CaseTestAttemptLink,
-  InvestigationCase,
-  InvestigationCaseId,
-  NewCaseTestAttemptLink,
-  NewInvestigationCase,
-} from '../../domain/investigation-case';
-import type { NewTestAttempt, TestAttempt, TestAttemptId } from '../../domain/test-attempt';
-import type { NewUut, Uut, UutId } from '../../domain/uut';
+import type { InvestigationCase, InvestigationCaseId } from '../../domain/investigation-case';
+import type { TestAttempt, TestAttemptId } from '../../domain/test-attempt';
+import type { Uut, UutId } from '../../domain/uut';
 import type { TransactionToken } from './transaction-scope';
 
 export type RepositoryErrorCode =
@@ -19,7 +13,7 @@ export type RepositoryErrorCode =
 
 export type RepositoryError = SdrisError<
   RepositoryErrorCode,
-  { readonly expectedVersion?: number }
+  { readonly expectedVersion?: number; readonly actualVersion?: number }
 >;
 
 /**
@@ -27,44 +21,34 @@ export type RepositoryError = SdrisError<
  * Every mutating call takes the transaction token of the surrounding unit of work.
  */
 export interface InvestigationRepository {
-  /**
-   * Stores a new UUT and returns it as stored. PostgreSQL generates `created_at`; callers cannot supply it.
-   * Fails if the id already exists. UUTs are immutable: there is no update.
-   */
-  addUut(uut: NewUut, tx: TransactionToken): Promise<Result<Uut, RepositoryError>>;
+  /** Stores a new UUT. Fails if the id already exists. UUTs are immutable: there is no update. */
+  addUut(uut: Uut, tx: TransactionToken): Promise<Result<void, RepositoryError>>;
   getUut(id: UutId, tx?: TransactionToken): Promise<Uut | undefined>;
 
-  /** Stores a new TestAttempt (its UUT must exist); PostgreSQL generates `registered_at`. Immutable: no update. */
+  /** Stores a new TestAttempt (its UUT must exist). Fails if the id already exists. Immutable: no update. */
   addTestAttempt(
-    attempt: NewTestAttempt,
+    attempt: TestAttempt,
     tx: TransactionToken,
-  ): Promise<Result<TestAttempt, RepositoryError>>;
+  ): Promise<Result<void, RepositoryError>>;
   getTestAttempt(id: TestAttemptId, tx?: TransactionToken): Promise<TestAttempt | undefined>;
 
-  /** Stores a newly opened case (the UUT must exist); PostgreSQL generates `opened_at`. Fails if the id exists. */
+  /** Stores a newly opened case (the UUT must exist). Fails if the id already exists. */
   add(
-    investigationCase: NewInvestigationCase,
+    investigationCase: InvestigationCase,
     tx: TransactionToken,
-  ): Promise<Result<InvestigationCase, RepositoryError>>;
+  ): Promise<Result<void, RepositoryError>>;
 
-  /**
-   * Loads the case with its links in retrieval order (registered_at, attempt id, role). The case and its links are
-   * read by ONE statement, so the version and the links come from the same snapshot.
-   */
+  /** Loads the case with its links in retrieval order (registered_at, attempt id, role). */
   get(id: InvestigationCaseId, tx?: TransactionToken): Promise<InvestigationCase | undefined>;
 
   /**
-   * Stores a new link and advances the case version, atomically, if and only if the stored version still equals
-   * `investigationCase.version` (optimistic concurrency, one atomic UPDATE). Returns the new version and the link as
-   * stored (PostgreSQL generates `linked_at`), or a concurrency conflict. The repository never retries: the caller
-   * re-reads and re-evaluates. Only a violation of the two same-UUT keys becomes `uut_mismatch`; any other database
-   * failure is thrown, not converted into a result.
+   * Persists the links that are not stored yet if, and only if, the stored
+   * version still equals `investigationCase.version`. The check is one atomic UPDATE in PostgreSQL. Returns the
+   * new stored version, or a concurrency conflict. The repository never retries: the caller re-reads and
+   * re-evaluates. Stored links are never rewritten.
    */
-  addLink(
+  save(
     investigationCase: InvestigationCase,
-    link: NewCaseTestAttemptLink,
     tx: TransactionToken,
-  ): Promise<
-    Result<{ readonly version: number; readonly link: CaseTestAttemptLink }, RepositoryError>
-  >;
+  ): Promise<Result<{ readonly version: number }, RepositoryError>>;
 }

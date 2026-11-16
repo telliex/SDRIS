@@ -3,12 +3,13 @@ import { describe, it } from 'node:test';
 import { newEntityId } from '@sdris/shared-kernel';
 import { parseTestStage, registerTestAttempt, TEST_STAGES } from './test-attempt';
 import { createUut } from './uut';
-import { uutRef } from './test-builders.spec';
+import { timestamp, uutRef } from './test-builders.spec';
 
 describe('UUT', () => {
   it('has an internal UUIDv7 identity and optional external attributes', () => {
     const bare = createUut({
       id: newEntityId<'UUT'>(),
+      createdAt: timestamp('2026-11-15T08:00:00.000Z'),
     });
     assert.equal(bare.serialNumber, undefined);
     assert.equal(bare.hostname, undefined);
@@ -21,6 +22,7 @@ describe('UUT', () => {
         id: newEntityId<'UUT'>(),
         serialNumber: value,
         hostname: value,
+        createdAt: timestamp('2026-11-15T08:00:00.000Z'),
       });
       assert.equal(uut.serialNumber, value);
       assert.equal(uut.hostname, value);
@@ -31,10 +33,12 @@ describe('UUT', () => {
     const a = createUut({
       id: newEntityId<'UUT'>(),
       serialNumber: 'SN-1',
+      createdAt: timestamp('2026-11-15T08:00:00.000Z'),
     });
     const b = createUut({
       id: newEntityId<'UUT'>(),
       serialNumber: 'SN-1',
+      createdAt: timestamp('2026-11-15T08:00:00.000Z'),
     });
     assert.notEqual(a.id, b.id);
     assert.equal(a.serialNumber, b.serialNumber);
@@ -67,6 +71,7 @@ describe('TestAttempt', () => {
       uut,
       stage: 'SAT',
       externalExecutionReference: '  run-77 ',
+      registeredAt: timestamp('2026-11-15T09:00:00.000Z'),
     });
     assert.equal(withRef.uut.id, uut.id);
     assert.equal(withRef.externalExecutionReference, '  run-77 ');
@@ -75,6 +80,7 @@ describe('TestAttempt', () => {
       id: newEntityId<'TestAttempt'>(),
       uut,
       stage: 'IST',
+      registeredAt: timestamp('2026-11-15T09:00:00.000Z'),
     });
     assert.equal(without.externalExecutionReference, undefined);
   });
@@ -87,6 +93,7 @@ describe('TestAttempt', () => {
         uut,
         stage: 'IST',
         externalExecutionReference: 'same',
+        registeredAt: timestamp('2026-11-15T09:00:00.000Z'),
       });
     const [a, b] = [make(), make()];
     assert.equal(a.externalExecutionReference, b.externalExecutionReference);

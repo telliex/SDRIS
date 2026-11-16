@@ -142,6 +142,7 @@ test(
       'commit persisted both writes',
       'identical link is idempotent',
       'idempotent repeat changed nothing',
+      'stale version beats idempotency',
       'cross-UUT rejected',
       'cross-UUT stored nothing',
       'database composite foreign keys reject cross-UUT rows',
