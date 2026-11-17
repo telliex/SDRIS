@@ -5,16 +5,22 @@ approves nothing. **No document below is marked ACCEPTED.** A document changes s
 explicit written approval is recorded in that document's sign-off block below, and the status change is then made in its own
 commit.
 
+**State of the repository when this checklist was refreshed:** S0-05 is merged into `main` (PR #6, merge commit `f8bb094`,
+final implementation `2c11d93`, merge authorised by the Engineering Owner). Merge is not acceptance: the S0-05 Architecture
+Acceptance and closure are **pending** (see section 7), and ADR-025 and A1 to A4 are **PROPOSED**. S0-06 is not started.
+
 **Documents covered**
 
-| #   | Document                                                               | Current status | Where                                                                       |
-| --- | ---------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------- |
-| 1   | ADR-025 — PostgreSQL Persistence Architecture and Migration Governance | PROPOSED       | [ADR-025](ADR-025-postgresql-persistence-architecture.md), sections 1 to 17 |
-| 2   | Amendment A1 — Persistence dependency policy for S0-05                 | PROPOSED       | same file, "Proposed Amendment A1"                                          |
-| 3   | Amendment A2 — Dedicated composition entry point (revises A1 Rule 3)   | PROPOSED       | same file, "Proposed Amendment A2"                                          |
-| 4   | Amendment A3 — Test-only entrypoints                                   | PROPOSED       | same file, "Proposed Amendment A3"                                          |
-| 5   | Amendment A4 — Compiled runtime packaging                              | PROPOSED       | same file, "Proposed Amendment A4"                                          |
-| 6   | S0-05 Domain Specification                                             | PROPOSED       | [specification](../specs/S0-05-investigation-aggregate-foundation.md)       |
+| #   | Document                                                               | Current status                                                                               | Where                                                                       |
+| --- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| 1   | ADR-025 — PostgreSQL Persistence Architecture and Migration Governance | PROPOSED                                                                                     | [ADR-025](ADR-025-postgresql-persistence-architecture.md), sections 1 to 17 |
+| 2   | Amendment A1 — Persistence dependency policy for S0-05                 | PROPOSED                                                                                     | same file, "Proposed Amendment A1"                                          |
+| 3   | Amendment A2 — Dedicated composition entry point (revises A1 Rule 3)   | PROPOSED                                                                                     | same file, "Proposed Amendment A2"                                          |
+| 4   | Amendment A3 — Test-only entrypoints                                   | PROPOSED                                                                                     | same file, "Proposed Amendment A3"                                          |
+| 5   | Amendment A4 — Compiled runtime packaging                              | PROPOSED                                                                                     | same file, "Proposed Amendment A4"                                          |
+| 6   | S0-05 Domain Specification                                             | APPROVED WITH CHANGES (Owner, [final approval v1.0](../specs/S0-05-final-owner-approval.md)) | [specification](../specs/S0-05-investigation-aggregate-foundation.md)       |
+| 7   | S0-05 Architecture Acceptance record                                   | DRAFT, pending Owner sign-off                                                                | [acceptance record](../specs/S0-05-architecture-acceptance.md)              |
+| 8   | S0-05 Closure record                                                   | DRAFT, closure pending                                                                       | [closure record](../specs/S0-05-closure-record.md)                          |
 
 ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [gap analysis](../specs/S0-05-gap-analysis.md), the
@@ -22,19 +28,24 @@ ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [proposed persistence policy](../specs/S0-05-proposed-persistence-policy.md) and the
 [FailureObservation removal plan](../specs/S0-05-failureobservation-removal-plan.md).
 
-**Suggested approval order:** 1, then 2, then 3 (A2 revises A1 Rule 3, so A1 and A2 should be read together), then 4 and 5,
-then 6 last (the specification also needs the register decisions and refers to A1 and A2).
+**Effective order** (see the [decision package](ADR-025-decision-package.md), section 1.1): each record is approved separately and
+takes effect only from its own recorded approval. Only two dependencies are binding: ADR-025 may be accepted first, with
+**Decision 5 recorded as still CONDITIONAL until A2 is ACCEPTED**; and **A2 takes effect only after A1 is ACCEPTED**, because it
+revises A1 Rule 3. A3 and A4 are independent. Suggested reading order: 1, 2, 3, 4, 5. The specification (6) is already approved.
 
 **Governance questions for the Owner (decide before approving)**
 
-- [ ] Are accepted amendments folded into the ADR-025 text, or kept as named amendments? (Today they sit in the same file,
-      each with its own Status line.)
-- [ ] Does approving ADR-025 leave the amendments PROPOSED until each is approved separately? (Recommended: yes.)
+- [x] Are accepted amendments folded into the ADR-025 text, or kept as named amendments? **Answered by the final approval,
+      section 6:** preserve them as independently traceable records and document the effective policy of each approved one.
+- [x] Does approving ADR-025 leave the amendments PROPOSED until each is approved separately? **Answered by the final approval,
+      section 6:** yes; approval of ADR-025 does not approve A1 to A4, and domain approval does not imply ADR approval.
 
-**Evidence baseline (fresh clone at `4af1348`):** `check:structure`, `check:architecture` (0 violations, 10 public type
-surfaces), `lint`, `format:check`, `typecheck`, `build` exit 0; `pnpm test` 261 root plus 60, 31, 12 and 1 per workspace;
-`pnpm db:test` against real PostgreSQL: database 53, API chain 17, compiled runtime 4; migration checksums of `0001` and `0002`
-equal the recorded ones. No CI exists yet (S0-10), so all results are local.
+**Evidence baseline (fresh clone of `2c11d93`, merged as `f8bb094`):** `check:structure`, `check:architecture` (17 packages,
+78 files, 10 public type surfaces, 0 notes; 33 valid and 133 invalid fixtures; 30 type-surface tests), `lint`, `format:check`,
+`typecheck`, `build` exit 0; `pnpm test` 261 root plus 60, 31, 38 and 1 per workspace; `pnpm db:test` against PostgreSQL 16.14:
+database 53, API 43, compiled runtime 4; migration checksum of `0001` (`c9add3b0…`) equals `main`, `0002` is `b4914ddb…`. No CI
+exists yet (S0-10), so all results are local. **Not verified:** whether any shared or production environment ever applied an
+earlier `0002` (acceptance record, OPEN-1).
 
 ---
 
@@ -59,8 +70,8 @@ Commits: `4dddcbc`, `8b4a2b0` (Decision 5 text), `9f792cd` (index). Related: ADR
 
 **Open points to read before approving**
 
-- Decision 5 stays conditional; the Owner should decide whether a shared transaction contract is ever wanted (A2.6 recommends
-  waiting for a second context).
+- Decision 5 stays **CONDITIONAL until A2 is ACCEPTED**; the Owner should decide whether a shared transaction contract is ever
+  wanted (A2.6 recommends waiting for a second context). If ADR-025 is accepted first, record Decision 5 as still conditional.
 - Section 10 says a missing row may be distinguished from a stale version "where required"; today the adapter reports both as a
   conflict. The proposed policy (S0-05 persistence policy, section 6) distinguishes them.
 - Section 17 follow-ups: CI (S0-10), Retrieval schema, audit/outbox/inbox/jobs ownership, dependency-vulnerability triage remain open.
@@ -93,7 +104,7 @@ Commits: `658bbf1`; fixes `b450740`, `83a5df1`, `986b65e`; rules `6491ca8`.
 | Rule 7: `@sdris/database` only through its published entrypoint                                                               | Fixtures 31 to 31d                                                                | ☐              |
 
 **Open points:** directory names under `src/` carry architectural meaning (A1.5); intra-module layering beyond Rule 3 is not
-covered; the Investigation allowlist entry is authorised by the S0-05 adapter work, which is itself unapproved.
+covered; the Investigation allowlist entry was reviewed with the S0-05 adapter work, which the Owner's final approval authorised and which is merged; A1 itself remains PROPOSED.
 
 **Sign-off**
 
@@ -123,7 +134,7 @@ Commits: `e605988` (rules), `a2d2a1f` (type surfaces), `938e1a8` (opaque handle)
 | `PersistenceHandle` is opaque                                                                                                              | Unit tests and the non-opaque detection case   | ☐              |
 | Decision 5 evaluation (A2.6) and the recommendation to keep a context-owned `TransactionScope`                                             | `persistence.md` section 8 and ADR-025 A2.6    | ☐              |
 
-**Open points:** one equivalent mutant (package check implied by the path check); type surfaces verify declared types, not
+**Dependency:** A2 takes effect only after A1 is ACCEPTED (it revises A1 Rule 3); A2's own approval record states how A2.6 satisfies ADR-025 Decision 5's condition; ADR-025's text is not edited. **Open points:** one equivalent mutant (package check implied by the path check); type surfaces verify declared types, not
 behaviour; each context currently owns its own `TransactionScope` copy; adapter tests must live under `src/infrastructure/**`.
 
 **Sign-off**
@@ -202,18 +213,29 @@ The specification, the register, the persistence policy and the removal plan are
 traceability table maps each decision to implementation and tests. Domain approval does not approve any ADR (final approval
 section 6): the gates below concern the ADRs and the final acceptance.
 
-| Gate before approval                                                                                   | State                                               | Owner confirms |
-| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | -------------- |
-| All ten questions answered in the register                                                             | done (final approval v1.0)                          | ☑              |
-| The answers written into the specification, register, persistence policy and removal plan              | done, contradictions checked                        | ☐              |
-| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | done (Q8)                                           | ☑              |
-| Removal plan for FailureObservation approved (Q8)                                                      | done, executed (`4425dca`)                          | ☑              |
-| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | updated to the final approval                       | ☐              |
-| ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)                 | open: all remain PROPOSED, each approved separately | ☐              |
-| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open: Owner confirms                                | ☐              |
+| Gate before approval                                                                                   | State                                                                                                                                                                                       | Owner confirms |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| All ten questions answered in the register                                                             | done (final approval v1.0)                                                                                                                                                                  | ☑              |
+| The answers written into the specification, register, persistence policy and removal plan              | done, contradictions checked                                                                                                                                                                | ☐              |
+| Scope confirmed: UUT, TestAttempt, InvestigationCase, CaseTestAttemptLink; FailureObservation deferred | done (Q8)                                                                                                                                                                                   | ☑              |
+| Removal plan for FailureObservation approved (Q8)                                                      | done, executed (`4425dca`)                                                                                                                                                                  | ☑              |
+| Persistence and identity policy approved (no implicit uniqueness or normalisation)                     | updated to the final approval                                                                                                                                                               | ☐              |
+| ~~ADR-025 and A1 to A4 approved first (the specification section 6 depends on A1 and A2)~~             | **Historical condition, superseded by the final approval** (section 6 keeps the ADRs independent; the specification is already APPROVED WITH CHANGES). ADR decisions are tracked separately | n/a            |
+| Acceptance criteria 1 to 12 still read correctly after the amendments                                  | open: Owner confirms                                                                                                                                                                        | ☐              |
 
-**Known gaps at this point:** acceptance 11 (Codex review of the final head) and 12 (Owner acceptance) are pending.
-Criteria 1 to 3 are met by the implementation; 7 and 8 are met by A4 and A3.
+**Separate tracks (each decided on its own record; none implies another):**
+
+| Track                                     | State                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| S0-05 specification approval              | **Done** (APPROVED WITH CHANGES, final approval v1.0)                                                      |
+| S0-05 architecture acceptance and closure | **Pending Owner** (acceptance record section 12; closure record gates, classification proposed)            |
+| ADR-025 and A1 to A4, each individually   | **Independent, PROPOSED**, tracked in sections 1 to 5                                                      |
+| S0-06 start prerequisites                 | As listed in the [readiness summary](../specs/S0-06-readiness-summary.md), section 5; no earlier exception |
+
+**State of the acceptance criteria:** 1 to 10 are met by the implementation and the merged evidence (criteria 7 and 8 by A4 and
+A3); 11 is satisfied (the Codex review of the final head `2c11d93` reported no major issue, comment 6911729542); 12, the
+Owner's architecture acceptance, is **pending**. The migration-governance condition of the final approval (section 4) is
+**NOT VERIFIED** for the release state of `0002` (acceptance record, OPEN-1).
 
 **Sign-off**
 
@@ -227,10 +249,34 @@ Status line updated in commit: ______________
 
 ---
 
+## 7. S0-05 Architecture Acceptance and closure
+
+Records: [acceptance record](../specs/S0-05-architecture-acceptance.md) and [closure record](../specs/S0-05-closure-record.md),
+both DRAFT. Status ladder: IMPLEMENTATION MERGED (yes); TECHNICAL ACCEPTANCE RECOMMENDED (yes, with one NOT VERIFIED item);
+ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF; CLOSURE PENDING.
+
+**Proposed classification only — not yet confirmed by the Owner.** Proposed closure gates: G1 sign-off of the acceptance record;
+G2 disposition of the four MINOR findings; G3 OPEN-1, closed either by evidence that no shared or production environment applied
+an earlier `0002` or by a **separate waiver decision that expressly amends the condition of final approval section 4** (a general
+acceptance sign-off does not satisfy it); G4 this checklist refreshed. The ADR decisions above are tracked separately and are
+proposed as **not** closure gates.
+
+**Sign-off** (Engineering Owner only; not completed by this draft)
+
+Architecture acceptance: ☐ ACCEPTED ☐ ACCEPTED WITH CONDITIONS ☐ NOT ACCEPTED
+
+Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
+
+---
+
 ## After approval
 
-1. Record each decision in the sign-off block above and in the Owner Decision Register.
-2. Commit the status change of **one document per commit** (`docs(adr): accept ...`), never together with code.
-3. Implement S0-05 domain work only after the specification and the register are approved.
-4. After implementation and the final commits, confirm the PR head SHA and trigger one `@codex review` for it.
-5. Stop for independent architecture acceptance; no automatic merge is authorised.
+1. Record each decision in the sign-off block of its own record and, for S0-05 decisions, in the Owner Decision Register.
+2. Complete and commit **all** editorial corrections listed in the decision package (sections 4, 5 and 9) first, in one commit that
+   changes no Status line. A1 to A4 share the ADR-025 file, so after the first status change it is not edited in place again.
+3. Then change statuses one record per commit (`docs(adr): accept ...`), never together with code; **each commit changes only
+   that record's own Status line**. When A2 is accepted, A2's effective-policy record states how A2.6 satisfies Decision 5's
+   condition; ADR-025's text is not edited.
+4. Maintain an effective-policy summary for each accepted record.
+5. S0-06 does not start until the Engineering Owner has signed off the S0-05 acceptance and closed S0-05; there is no earlier
+   exception. No merge is authorised by this checklist.
