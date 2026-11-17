@@ -8,17 +8,17 @@
 **Evidence baseline:** fresh clone of `2c11d93` (merged as `f8bb094`): `check:architecture` 17 packages, 78 files, 10 public
 type surfaces, 0 notes; 33 valid and 133 invalid fixtures; 30 type-surface tests; `pnpm test` exit 0; `pnpm db:test` against
 PostgreSQL 16.14: database 53/53, API 43/43, compiled runtime 4/4. Local results; no CI until S0-10. The evidence table in the
-approval checklist is refreshed to this baseline in the same branch (pending an authorised commit).
+approval checklist was refreshed to this baseline and committed (`a99699c`).
 
 ## 1. Summary of recommendations
 
-| Record  | Recommendation                      | One-line reason                                                                                                                               |
-| ------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-025 | **ACCEPT**                          | Nine decisions are ACCEPT, one is DEFER (9) and one CONDITIONAL (5); all are evidenced. **Decision 5 stays CONDITIONAL until A2 is ACCEPTED** |
-| A1      | **REVISE (editorial), then ACCEPT** | The rules are implemented and tested; two statements in its text are no longer true (section 4)                                               |
-| A2      | **REVISE (editorial), then ACCEPT** | The rules are implemented and tested; three statements in its text are no longer true; it must be read with A1                                |
-| A3      | **ACCEPT**                          | Small, enforced, evidenced; one documented limitation                                                                                         |
-| A4      | **ACCEPT**                          | Required by the S0-05 acceptance criteria; verified by a plain-Node test; one clarification suggested                                         |
+| Record  | Recommendation                                            | One-line reason                                                                                                                               |
+| ------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADR-025 | **ACCEPT**                                                | Nine decisions are ACCEPT, one is DEFER (9) and one CONDITIONAL (5); all are evidenced. **Decision 5 stays CONDITIONAL until A2 is ACCEPTED** |
+| A1      | **ACCEPT** (editorial corrections applied)                | The rules are implemented and tested; the two outdated statements were corrected without changing any rule (section 4)                        |
+| A2      | **ACCEPT** (editorial corrections applied; only after A1) | The rules are implemented and tested; the outdated statements were corrected without changing any rule; it must be read with A1               |
+| A3      | **ACCEPT**                                                | Small, enforced, evidenced; one documented limitation                                                                                         |
+| A4      | **ACCEPT**                                                | Required by the S0-05 acceptance criteria; verified by a plain-Node test; the `./testing` clarification is applied                            |
 
 ### 1.1 Effective-order rules (one rule set, used everywhere in this package)
 
@@ -38,7 +38,7 @@ approval checklist is refreshed to this baseline in the same branch (pending an 
    re-opened and the checker work built on it is reworked (section 2).
 6. The order in section 9 is the suggested **reading and approval order**; only rules 2 and 3 are real dependencies.
 
-"REVISE (editorial)" means no rule changes: only sentences describing the state of the implementation are corrected.
+The editorial corrections recommended earlier ("REVISE (editorial)") **have been applied** in the pre-approval documentation-correction commit: only sentences describing the state of the implementation were corrected and **no rule changed**.
 
 **One sequence for status changes (used in section 9 and in the checklist):**
 
@@ -86,6 +86,35 @@ This is a governance risk, not a defect: the Owner authorised implementation ahe
    A1 or A2 is rejected, Decision 4's "approved infrastructure-layer imports" and Decision 6's adapter location become
    undefined again.
 
+### 3.1 The 22 dependency audit findings of ADR-025 section 14 (as of 2026-11-17)
+
+Source: `pnpm audit --prod` run on 2026-11-17 against the merged lockfile (204 production dependencies): **22 advisories, 10 high,
+10 moderate, 2 low, 0 critical**, matching the count in ADR-025. None is in a persistence package (`@sdris/database`,
+Drizzle, the PostgreSQL driver).
+
+| Package        | Advisories | Severity                  | Brought in by                                                        | Patched from |
+| -------------- | ---------- | ------------------------- | -------------------------------------------------------------------- | ------------ |
+| `multer`       | 9          | 7 high, 1 moderate, 1 low | `apps/api` > `@nestjs/platform-express@10.4.22` > `multer@2.0.2`     | `>=2.5.0`    |
+| `qs`           | 4          | 4 moderate                | `apps/api` > `platform-express` > `body-parser@1.20.4` > `qs@6.14.3` | `>=6.16.1`   |
+| `postcss`      | 4          | 2 high, 2 moderate        | `apps/web` > `next@15.5.29` > `postcss@8.4.31`                       | `>=8.5.23`   |
+| `body-parser`  | 2          | 1 high, 1 low             | `apps/api` > `platform-express` > `body-parser@1.20.4`               | `>=1.20.9`   |
+| `file-type`    | 2          | 2 moderate                | `apps/api` > `@nestjs/common@10.4.22` > `file-type@20.4.1`           | `>=21.3.2`   |
+| `@nestjs/core` | 1          | 1 moderate                | `apps/api` > `@nestjs/core@10.4.22`                                  | `>=11.1.18`  |
+
+- **Classification (ADR-025 section 14):** outside the persistence scope; require separate security triage; **not accepted as
+  safe and not waived**. Nothing in this package, in ADR-025 or in A1 to A4 grants an exemption.
+- **Enforcement today:** none automated. No `audit` script in any `package.json`, no CI workflow (S0-10), and the audit exits
+  non-zero when run by hand. Section 14 asks for the triage "before production deployment".
+- **Observations, not a reachability determination:** the repository sources contain no upload, multipart or `file-type` code;
+  `apps/api` has only a health controller and the Investigation composition root.
+- **Remediation facts:** every affected package is pinned by its parent (`@nestjs/platform-express@10`, `@nestjs/common@10`,
+  `next@15.5.29`), so a fix needs a parent upgrade or an override, which this package has not evaluated. The `@nestjs/core`
+  fix is in a **major version above 10.x**; `CLAUDE.md` section 4 forbids major framework upgrades without approval.
+- **Acceptance implications:** accepting ADR-025 does not accept these findings (section 14 says so) and needs no decision
+  about them. **No Owner decision is required for ADR-025, A1 to A4 or the closure of S0-05.** An Owner decision is needed only
+  if the Owner wants to (a) schedule the triage as a named task before a named event, (b) approve a major-version upgrade or
+  dependency overrides, or (c) record a risk acceptance before any deployment.
+
 ## 4. Amendment A1 — Persistence dependency policy
 
 1. **Proposed rule.** Persistence libraries (`drizzle-orm`, `@sdris/database`) may be imported only from a context's
@@ -101,10 +130,10 @@ This is a governance risk, not a defect: the Owner authorised implementation ahe
    confirmed. `dependency-matrix.json` lists only Investigation.
 4. **Trade-offs and risks.** Directory names under `src/` become architecture (A1.5); intra-module layering beyond Rule 3 is not
    covered; a new context needing persistence needs a reviewed allowlist entry (deliberate friction).
-5. **Recommendation: REVISE (editorial), then ACCEPT.** Corrections: (a) the header line "Implementation reference: branch
+5. **Recommendation: ACCEPT.** Corrections **applied** (no rule changed): (a) the header line "Implementation reference: branch
    `feat/s0-05-persistence-dependency-policy` (checker, fixtures and tests only; no repository adapter is implemented)" (ADR-025
-   line 498) is now false: PR #6 implemented the adapter; (b) A1.3 "The default committed allowlist is empty. The Investigation
-   entry above is an example ... It is not added by this amendment" (line 557) is now false: the committed policy lists
+   line 498) was outdated (corrected): PR #6 implemented the adapter; (b) A1.3 "The default committed allowlist is empty. The Investigation
+   entry above is an example ... It is not added by this amendment" (line 557) was outdated (corrected): the committed policy lists
    Investigation.
 6. **Interactions.** **A2 revises Rule 3 of A1** (see section 9). A1 depends on nothing; A2 and A3 build on its policy file.
 
@@ -126,11 +155,11 @@ This is a governance risk, not a defect: the Owner authorised implementation ahe
 4. **Trade-offs and risks.** Type surfaces verify declared types, not behaviour; each context will own a small copy of the
    transaction port; the zone name `composition` becomes architecture; `InvestigationModuleOptions.now` is a clock override that
    only approved roots can reach.
-5. **Recommendation: REVISE (editorial), then ACCEPT.** Corrections: (a) A2.5 "The API has no workspace build step yet, so a
-   compiled `dist` ... is not addressed by this amendment" (line 686) is superseded by A4; (b) A2.7 "Whether the runtime
-   composition needs a package build step" (line 705) is decided by A4; (c) A2.7 "the S0-05 specification is not committed; the
-   minimal aggregate ... is only a vehicle" (line 707) is false: the specification is committed and the aggregate is the approved
-   model. Also update "Implementation reference: PR #6" to note it is merged (`f8bb094`).
+5. **Recommendation: ACCEPT (only after A1).** Corrections **applied** (no rule changed): (a) A2.5 "The API has no workspace build step yet, so a
+   compiled `dist` ... is not addressed by this amendment" (line 686) was superseded by A4 (corrected); (b) A2.7 "Whether the runtime
+   composition needs a package build step" (line 705) is decided by A4 (corrected); (c) A2.7 "the S0-05 specification is not committed; the
+   minimal aggregate ... is only a vehicle" (line 707) was false (corrected): the specification is committed and the aggregate is the approved
+   model; (d) "Implementation reference: PR #6" now notes it is merged (`f8bb094`). Two clarifications were added to A2 itself: it takes effect only after A1 is accepted, and ADR-025 Decision 5 stays CONDITIONAL until A2 is accepted, with A2's own record satisfying it.
 6. **Interactions.** **Revises A1 Rule 3 and must be read with A1.** A4 resolves a limitation A2 states. A2.6 feeds ADR-025
    Decision 5. A2's `package/entrypoint-location` rule and A4's `package/exports-condition` rule act on the same `exports`
    field and must agree (they do in the checker: fixtures 40 and 70 to 70i).
@@ -175,7 +204,7 @@ This is a governance risk, not a defect: the Owner authorised implementation ahe
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | A1 vs A2                    | **A2 revises A1 Rule 3**: infrastructure imports widen from `src/infrastructure/**` to that plus `src/composition/**`. Every other A1 rule stands; fixtures 29f and 29g (full-path restriction) still fail as required. | No conflict, but A1's Rule 3 text must carry the revision note (it already does) and A2 must not be accepted without A1 |
 | A2 vs A4                    | A2.5 says compiled `dist` is not addressed; A4 addresses it. Both govern package `exports`                                                                                                                              | Stale sentence in A2 (section 5, correction b and c)                                                                    |
-| A3 vs A4                    | `./testing` is restricted (A3) and also built to `dist` (A4)                                                                                                                                                            | Wording only: A4's "spike helpers are not shipped"                                                                      |
+| A3 vs A4                    | `./testing` is restricted (A3) and also built to `dist` (A4); **clarified in both texts**: A3 restricts imports and does not govern physical inclusion in `dist`                                                        | Wording only: A4's "spike helpers are not shipped"                                                                      |
 | A1 vs A3                    | Both add keys to `dependency-matrix.json`                                                                                                                                                                               | None                                                                                                                    |
 | A2 vs ADR-025 Decision 5    | A2.6 is the S0-05 evaluation of Decision 5's condition; **the condition is satisfied only when A2 is ACCEPTED, by A2's own record; ADR-025 is not edited**                                                              | Accepting ADR-025 without A2 leaves Decision 5 open                                                                     |
 | ADR-025 Decision 7 vs S0-06 | Audit atomicity is required, ownership deferred                                                                                                                                                                         | Not a conflict; an upcoming decision (see the S0-06 summary)                                                            |
@@ -185,9 +214,9 @@ This is a governance risk, not a defect: the Owner authorised implementation ahe
 1. Governance questions in the checklist: the final approval (section 6) already answers both. Amendments are **preserved as
    independently traceable records**, with the effective policy documented for each approved amendment, and **approval of
    ADR-025 does not approve A1 to A4**. The checklist is updated to say so.
-2. Complete and commit **all** editorial corrections of sections 4 and 5 (and the one-sentence A3/A4 clarification if wanted)
-   first, in one commit with no Status change and no rule change. A1 to A4 live in the same file as ADR-025, so after the first
-   status change that file is not edited in place again.
+2. **Done:** all editorial corrections of sections 4 and 5 and the A3/A4 clarification were committed together in one
+   documentation-only commit that changes no Status line and no rule. A1 to A4 live in the same file as ADR-025, so after the
+   first status change that file is not edited in place again.
 3. Suggested approval order: ADR-025, A1, A2 (after A1), A3, A4. Only the dependencies in section 1.1, rules 2 and 3, are binding
    (ADR-025 may go first with Decision 5 still CONDITIONAL; A2 only after A1). Record each decision in the checklist sign-off
    block.

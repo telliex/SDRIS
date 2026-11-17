@@ -495,8 +495,8 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
   and is not in force until the Engineering Owner approves it in writing.
 - **Resolves:** the open points about Decisions 4 and 6 (where a repository adapter lives, whether it may import
   `drizzle-orm` directly, and how "approved infrastructure-layer imports" is decided).
-- **Implementation reference:** branch `feat/s0-05-persistence-dependency-policy` (checker, fixtures and tests only; no
-  repository adapter is implemented).
+- **Implementation reference:** branch `feat/s0-05-persistence-dependency-policy`, merged to `main` through PR #6
+  (`f8bb094`) together with the S0-05 Investigation adapter; the checker, fixtures and tests enforce these rules.
 
 ### A1.1 Terminology
 
@@ -519,7 +519,7 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
    alias, a barrel file or a re-export. Because an intermediary outside `src/infrastructure/**` cannot import it at all,
    a barrel cannot launder it, and indirect imports need no separate tracking. A repository adapter implements a port
    defined in `src/application`; the port never imports the adapter. Tests of an adapter live inside
-   `src/infrastructure/**`. **Revised by Amendment A2:** `src/composition/**` may also import it (and no other path).
+   `src/infrastructure/**`. **Proposed revision by Amendment A2** (it takes effect only if A1 and then A2 are accepted): `src/composition/**` may also import it (and no other path).
 4. **Global Infrastructure does not import business modules by default.** `infrastructure/*` may depend only on the
    Shared Kernel, contracts and config. It may not import a business module's public entrypoint or internals. There is
    no exception mechanism in this amendment: any exception requires a further amendment.
@@ -554,8 +554,8 @@ key lists, per module, what its Context Infrastructure may use. Everything not l
 - A malformed entry makes the checker exit with code 2 (cannot analyse); it never silently grants or denies access.
 - A module's `package.json` may declare an allowlisted package as a dependency (pnpm requires it) and may not declare any
   other persistence package.
-- The default committed allowlist is empty. The Investigation entry above is an example of what the S0-05 adapter pull
-  request would add, reviewed together with the adapter. It is not added by this amendment.
+- The committed allowlist now contains the Investigation entry above, added with the S0-05 adapter (PR #6, merged). The
+  default for every other context remains empty: nothing is allowed unless it is listed.
 
 ### A1.4 Enforcement
 
@@ -595,9 +595,16 @@ the manifest check each turns fixtures red.
   `src/infrastructure/**`. A2 widens that to `src/infrastructure/**` **and** `src/composition/**`. Every other path
   (`src/domain`, `src/application`, `src/public`, `src/helpers`, `src/shared`, `test/`, and so on) remains forbidden, so
   the full-path restriction exercised by fixtures 29f and 29g is unchanged. All other A1 rules stand.
+- **Effectiveness.** A2 can take effect only after A1 is accepted, because it revises a rule of A1. Until both are accepted,
+  A1 Rule 3 as originally written (only `src/infrastructure/**`) is the proposed rule and the widening is part of this
+  proposal. If A1 is revised in substance, A2 is re-based before it is decided.
+- **Relation to ADR-025 Decision 5.** Decision 5 stays CONDITIONAL, as written in ADR-025, until this amendment is accepted.
+  On acceptance, this amendment's own approval and effective-policy record states that A2.6 satisfies Decision 5's
+  condition; ADR-025's text is not edited.
 - **Resolves:** the composition gap found while applying A1: the application composition root (`apps/api`) needs a
   legitimate way to obtain a working module, but the public entrypoint may not import infrastructure.
-- **Implementation reference:** PR #6 (checker, type-surface verification, Investigation implementation).
+- **Implementation reference:** PR #6, merged as `f8bb094` (checker, type-surface verification, Investigation
+  implementation).
 
 ### A2.1 Design
 
@@ -682,8 +689,8 @@ names the approved handle.
 - The type-surface check reads the declared types of exports; it cannot prove that a function body never returns a
   private object through a correctly typed interface. Review remains necessary for behaviour.
 - Test files for an adapter must live under `src/infrastructure/**`.
-- The composition subpath is resolved by `tsx` and by TypeScript through `exports` and `typesVersions`. The API has no
-  workspace build step yet, so a compiled `dist` that must run outside `tsx` is not addressed by this amendment.
+- The composition subpath is resolved by `tsx` and by TypeScript through `exports` and `typesVersions`. Running a compiled
+  `dist` outside `tsx` is addressed by Amendment A4, not by this amendment.
 
 ### A2.6 Decision 5 evaluation (UnitOfWork), reported for the Owner
 
@@ -702,11 +709,11 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 ### A2.7 Not decided here
 
 - Whether `apps/worker` becomes a composition root (it is not authorised).
-- Whether the runtime composition needs a package build step for non-`tsx` execution.
+- Compiled runtime packaging: addressed by Amendment A4, not decided here.
 - The final home of a shared transaction contract (A2.6).
-- The Investigation aggregate itself: the S0-05 specification is not committed; the minimal aggregate in this change has no
-  status, no lifecycle and no content rules for descriptions (no trimming, length limit or emptiness rule), and is only a
-  vehicle for verifying the persistence path.
+- The Investigation aggregate itself: it is defined by the approved S0-05 specification and the Engineering Owner's final
+  approval (v1.0), not by this amendment. An earlier draft of this amendment described a minimal aggregate used only to verify
+  the persistence path; that aggregate has been replaced by the approved model.
 
 ## Proposed Amendment A3 — Test-Only Entrypoints
 
@@ -726,6 +733,11 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
   4. Files inside the protected directory may use each other. No separate testing workspace package is introduced.
 - **Enforcement:** `dependency/test-only-entrypoint`; a malformed policy exits with code 2.
 - **Limitation:** "recognised test file" is a naming convention, so a production file named `*.test.ts` would pass.
+- **Clarification (read with A4).** This amendment restricts **who may import** a test-only entrypoint; it does not keep the
+  testing helpers out of the compiled package. Under A4 the `./testing` entrypoint of `@sdris/database`
+  (`src/testing/index.ts` and `src/testing/isolated-database.ts`) is physically built into `dist/testing` and is a published
+  entrypoint, because the compiled-runtime test uses it. Presence in `dist` is not a security boundary: the restriction applies
+  to source imports of the entrypoint and of the directory behind it, whether or not the files are compiled.
 
 ## Proposed Amendment A4 — Compiled Runtime Packaging
 
@@ -734,7 +746,10 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
   The S0-05 specification requires compiled composition code to run under supported Node.js without tsx.
 - **Decision (smallest change that works):**
   1. `shared-kernel`, `database` and `investigation` build independently with `tsc -p tsconfig.build.json` into `dist/`
-     (JavaScript and declarations). Test-only spike helpers are not shipped.
+     (JavaScript and declarations). The spike helpers `src/testing/spike-store.ts` and `src/testing/script-generator.ts` are
+     excluded from the build. The `./testing` entrypoint itself (`src/testing/index.ts`, `src/testing/isolated-database.ts`)
+     **is** built into `dist/testing` and published as an entrypoint; who may import it is governed by Amendment A3, which
+     restricts imports and does not govern physical inclusion in `dist`.
   2. Every published entrypoint is written `{ "sdris-source": "./src/...ts", "types": "./dist/....d.ts", "default": "./dist/....js" }`.
      Plain Node and TypeScript consumers outside the repository follow `default` and `types`. Repository tests and NodeNext
      type checks use the `sdris-source` condition and need no prior build.

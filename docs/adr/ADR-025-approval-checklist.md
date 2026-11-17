@@ -161,7 +161,8 @@ Commits: `17f3ab6` (policy), `4af1348` (ADR text).
 | No separate testing workspace package                                                                             | Scope statement                                                           | ☐              |
 
 **Open points:** "recognised test file" is a naming convention, so a production file named `*.test.ts` would pass; the helper
-still ships in the package's `dist` as a published entrypoint.
+still ships in the package's `dist` as a published entrypoint (clarified in the A3 and A4 text: A3 restricts imports, not
+physical inclusion).
 
 **Sign-off**
 
@@ -270,8 +271,9 @@ Approver (Engineering Owner): ______________ Date: __________ Recorded in: _____
 ## After approval
 
 1. Record each decision in the sign-off block of its own record and, for S0-05 decisions, in the Owner Decision Register.
-2. Complete and commit **all** editorial corrections listed in the decision package (sections 4, 5 and 9) first, in one commit that
-   changes no Status line. A1 to A4 share the ADR-025 file, so after the first status change it is not edited in place again.
+2. **Done:** the editorial corrections listed in the decision package (sections 4, 5 and 9) and the A3/A4 clarification were
+   committed together in one documentation-only commit that changes no Status line and no rule. A1 to A4 share the ADR-025
+   file, so after the first status change it is not edited in place again.
 3. Then change statuses one record per commit (`docs(adr): accept ...`), never together with code; **each commit changes only
    that record's own Status line**. When A2 is accepted, A2's effective-policy record states how A2.6 satisfies Decision 5's
    condition; ADR-025's text is not edited.
