@@ -60,7 +60,7 @@ These are facts about what S0-05 delivered, offered as inputs for planning:
 
 1. The Sprint 0 Blueprint section for S0-06 (or an Owner-written S0-06 specification) committed to the repository.
 2. Recorded Owner decisions on ADR-025 and A1 to A4, each decided independently, because S0-06 persistence will be written against them (see the [decision package](../adr/ADR-025-decision-package.md) for the effective order).
-3. The Engineering Owner's sign-off of the S0-05 Architecture Acceptance and the closure of S0-05 (gates G1 to G4 of the [closure record](S0-05-closure-record.md), including the NOT VERIFIED item OPEN-1). **There is no exception that allows S0-06 to start before this.**
+3. The Engineering Owner's sign-off of the S0-05 Architecture Acceptance and the closure of S0-05 (gates G1 to G4 of the [closure record](S0-05-closure-record.md), where G3, OPEN-1, is resolved by Owner confirmation of 2026-11-17 but G1, G2 and G4 stay open). **There is no exception that allows S0-06 to start before this.**
 4. Owner decision on the four MINOR findings of S0-05 (fix, defer or accept), since S0-06 will touch the same service layer.
 5. The audit-ownership and transaction questions above.
 6. Not a prerequisite but a known gap: CI for the PostgreSQL tests is deferred to S0-10.

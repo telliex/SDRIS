@@ -44,8 +44,7 @@ revises A1 Rule 3. A3 and A4 are independent. Suggested reading order: 1, 2, 3, 
 78 files, 10 public type surfaces, 0 notes; 33 valid and 133 invalid fixtures; 30 type-surface tests), `lint`, `format:check`,
 `typecheck`, `build` exit 0; `pnpm test` 261 root plus 60, 31, 38 and 1 per workspace; `pnpm db:test` against PostgreSQL 16.14:
 database 53, API 43, compiled runtime 4; migration checksum of `0001` (`c9add3b0…`) equals `main`, `0002` is `b4914ddb…`. No CI
-exists yet (S0-10), so all results are local. **Not verified:** whether any shared or production environment ever applied an
-earlier `0002` (acceptance record, OPEN-1).
+exists yet (S0-10), so all results are local. **OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)**, release state of `0002` (no non-personal database environment applied it; acceptance record section 8).
 
 ---
 
@@ -234,8 +233,8 @@ section 6): the gates below concern the ADRs and the final acceptance.
 
 **State of the acceptance criteria:** 1 to 10 are met by the implementation and the merged evidence (criteria 7 and 8 by A4 and
 A3); 11 is satisfied (the Codex review of the final head `2c11d93` reported no major issue, comment 6911729542); 12, the
-Owner's architecture acceptance, is **pending**. The migration-governance condition of the final approval (section 4) is
-**NOT VERIFIED** for the release state of `0002` (acceptance record, OPEN-1).
+Owner's architecture acceptance, is **pending**. The migration-governance condition of the final approval (section 4) is satisfied for the release state of `0002` by Owner
+confirmation: **OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)** (acceptance record section 8).
 
 **Sign-off**
 
@@ -252,13 +251,12 @@ Status line updated in commit: ______________
 ## 7. S0-05 Architecture Acceptance and closure
 
 Records: [acceptance record](../specs/S0-05-architecture-acceptance.md) and [closure record](../specs/S0-05-closure-record.md),
-both DRAFT. Status ladder: IMPLEMENTATION MERGED (yes); TECHNICAL ACCEPTANCE RECOMMENDED (yes, with one NOT VERIFIED item);
+both DRAFT. Status ladder: IMPLEMENTATION MERGED (yes); TECHNICAL ACCEPTANCE RECOMMENDED (yes);
 ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF; CLOSURE PENDING.
 
 **Proposed classification only — not yet confirmed by the Owner.** Proposed closure gates: G1 sign-off of the acceptance record;
-G2 disposition of the four MINOR findings; G3 OPEN-1, closed either by evidence that no shared or production environment applied
-an earlier `0002` or by a **separate waiver decision that expressly amends the condition of final approval section 4** (a general
-acceptance sign-off does not satisfy it); G4 this checklist refreshed. The ADR decisions above are tracked separately and are
+G2 disposition of the four MINOR findings; G3 OPEN-1, which is **satisfied by the Owner's environment confirmation of 2026-11-17** (decision S0-05-OPEN-1; no waiver used; a
+general acceptance sign-off would not have satisfied it); G4 this checklist refreshed. The ADR decisions above are tracked separately and are
 proposed as **not** closure gates.
 
 **Sign-off** (Engineering Owner only; not completed by this draft)

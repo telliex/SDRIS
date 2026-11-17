@@ -25,7 +25,7 @@ only by the Engineering Owner.
 
 Result key. **PASS** = the requirement is met and the evidence named in the last two columns exists; the kind of evidence is
 stated in each row: _executed test_ (a test that was run and passed, named in the row) or _document review_ (consistency of
-documents, no executable test). **NOT VERIFIED** = the evidence needed is not available to the implementation engineer.
+documents, no executable test) or _Owner confirmation_ (a recorded Engineering Owner statement). **NOT VERIFIED** = the evidence needed is not available to the implementation engineer.
 **FAIL** = a requirement is not met (none).
 
 | #   | Decision                                       | Result                 | Code evidence                                                                                                                              | Test evidence                                                                                                                   |
@@ -43,11 +43,11 @@ documents, no executable test). **NOT VERIFIED** = the evidence needed is not av
 
 ### Other conditions of the final approval
 
-| Condition                                                                                                            | Result                 | Evidence                                                                                                                                              |
-| -------------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Final approval section 4: checksum of migration `0001` preserved                                                     | PASS (executed check)  | sha256 identical on `main` and unchanged since PR #5 (section 8)                                                                                      |
-| Final approval section 4: `0002` revised only if no shared or production environment ever used its previous checksum | **NOT VERIFIED**       | Only repository evidence exists (section 8). **No deployment or migration history of any shared or production environment was available or checked.** |
-| Final approval section 6: ADR-025 and A1 to A4 not marked ACCEPTED                                                   | PASS (document review) | All five records still say PROPOSED (section 9)                                                                                                       |
+| Condition                                                                                                            | Result                    | Evidence                                                                                                                                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final approval section 4: checksum of migration `0001` preserved                                                     | PASS (executed check)     | sha256 identical on `main` and unchanged since PR #5 (section 8)                                                                                                                                                                        |
+| Final approval section 4: `0002` revised only if no shared or production environment ever used its previous checksum | PASS (Owner confirmation) | **OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)**: the Owner confirmed that SDRIS has used only personal local development databases and that no non-personal database environment applied `0002` (decision S0-05-OPEN-1; section 8). |
+| Final approval section 6: ADR-025 and A1 to A4 not marked ACCEPTED                                                   | PASS (document review)    | All five records still say PROPOSED (section 9)                                                                                                                                                                                         |
 
 ## 3. Domain and persistence architecture
 
@@ -138,23 +138,33 @@ its own throw-away database `sdris_test_*`, dropped afterwards; no shared or pro
 
 ## 8. Migration checksum evidence
 
-| File   | sha256 (full)                                                      | Note                                                                     |
-| ------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `0001` | `c9add3b033050413c54e851957ba9fdec6e3513ffc35668bb1c4b6aba916847b` | Identical to `origin/main`; unchanged since PR #5                        |
-| `0002` | `b4914ddb67a28615d9342ebac4bbcada02fa8ccbbaea28f0f0721ff61eac0f49` | Revised in place before PR #6 merged; release state NOT VERIFIED (below) |
+| File   | sha256 (full)                                                      | Note                                                                                                         |
+| ------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `0001` | `c9add3b033050413c54e851957ba9fdec6e3513ffc35668bb1c4b6aba916847b` | Identical to `origin/main`; unchanged since PR #5                                                            |
+| `0002` | `b4914ddb67a28615d9342ebac4bbcada02fa8ccbbaea28f0f0721ff61eac0f49` | Revised in place before PR #6 merged; release state: OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17) (below) |
 
 On a one-off database the runner applied both scripts in order, reported both as `applied`, and applying again applied
 nothing.
 
-**Release state of `0002`: NOT VERIFIED.** What is established from the repository: `origin/main` contained only `0001` until
-PR #6 merged, and the commits of this PR revised `0002` before it merged. What is **not** established: that no shared,
-staging or production database ever applied an earlier `0002` (the final approval, section 4, asks for the deployment and
-migration history to be verified and the evidence recorded). That history is not in the repository and was not available, so
-this record does not claim it. Until that evidence is supplied, or the Engineering Owner records a **separate waiver decision that expressly amends the
-condition of final approval section 4** (naming the unverified scope, the disposition and the limitations), the claim
-"`0002` was unreleased" rests on repository evidence only (see OPEN-1 in section 11). Signing this acceptance record does not
-by itself waive or satisfy that condition; accepting a risk and completing a verification are different decisions. A developer's local
-`sdris_local` created from an earlier draft reports `modified` until `pnpm db:reset` (local, disposable only).
+**OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)**, release state of `0002` (decision S0-05-OPEN-1, Engineering Owner, 2026-11-17).
+
+- **Owner statement.** SDRIS has used only personal local development databases to date. No shared development, integration,
+  QA, staging, production, cloud-hosted or other non-personal database environment has applied migration `0002`. No
+  non-personal environment depends on an earlier checksum or revision of `0002`.
+- **Supporting observations (they support but do not independently establish the absence of external deployments).** The
+  repository shows `0002` was not on `main` before PR #6 merged; the commits of this PR revised `0002` before it merged; there
+  are no GitHub Actions runs, deployments or environments; the documented database deployment is local Docker Compose bound to
+  `127.0.0.1`; `0001` is unchanged; the final implementation was verified against disposable databases. **The Owner's explicit
+  environment confirmation is the decisive evidence.**
+- **Decision.** The S0-05 migration-governance requirement (final approval section 4) is satisfied for the verified project
+  deployment history. The merged `0002` (`b4914ddb…`) is retained; no forward-only corrective migration is required on the basis
+  of OPEN-1; **no migration reset or database modification is authorised by this confirmation.**
+- **Scope and limits.** It applies to the deployment history of SDRIS through 2026-11-17. It does not authorise modifying `0002`
+  again, is not an Architecture Acceptance signature, does not close S0-05, does not approve ADR-025 or A1 to A4, and does not
+  authorise S0-06. **If contradictory deployment evidence is discovered later, OPEN-1 must be reopened and reassessed.**
+
+A developer's local `sdris_local` created from an earlier draft reports `modified` until `pnpm db:reset` (local, disposable
+only).
 
 ## 9. Architecture verification
 
@@ -182,7 +192,7 @@ reviewer or Owner decision.
 
 ## 11. Known limitations and findings
 
-No BLOCKER and no MAJOR finding **about the code or architecture** is reported. One item is NOT VERIFIED (OPEN-1) and is not covered by that statement.
+No BLOCKER and no MAJOR finding **about the code or architecture** is reported. OPEN-1 was NOT VERIFIED and is resolved by Owner confirmation (2026-11-17, section 8); it is not a code finding.
 
 | ID      | Level         | Finding                                                                                                                                                                                                                                                                                                                                                                   |
 | ------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -192,15 +202,14 @@ No BLOCKER and no MAJOR finding **about the code or architecture** is reported. 
 | MINOR-4 | MINOR         | `DrizzleInvestigationRepository.save` re-reads the stored links to find the new one (an extra query); the new link could be passed explicitly.                                                                                                                                                                                                                            |
 | INFO-1  | INFORMATIONAL | The approval names `executionReference`; the code and column use `externalExecutionReference` / `external_execution_reference` to avoid confusion with the internal id (recorded in spec section 11).                                                                                                                                                                     |
 | INFO-2  | INFORMATIONAL | `InvestigationModuleOptions.now` is a composition-level clock override ("mainly for tests"); only approved composition roots may import it and `apps/api` passes none.                                                                                                                                                                                                    |
-| INFO-3  | INFORMATIONAL | No CI exists (S0-10): every result above is a local result. Not verified: other Node versions or operating systems, and the migration history of any shared environment (OPEN-1).                                                                                                                                                                                         |
+| INFO-3  | INFORMATIONAL | No CI exists (S0-10): every result above is a local result. Not verified: other Node versions or operating systems, (the release state of `0002` is covered by the Owner's confirmation, OPEN-1).                                                                                                                                                                         |
 | INFO-4  | INFORMATIONAL | The `0001` schema comment still lists "failure observations" for the Investigation schema; it is published and immutable.                                                                                                                                                                                                                                                 |
-| OPEN-1  | NOT VERIFIED  | The release state of migration `0002` (no shared or production environment ever applied an earlier `0002`) is not verified; see section 8. Closed only by the Owner's evidence, or by a separate waiver decision that amends final approval section 4 (closure record 4.3); the acceptance sign-off alone does not close it.                                              |
+| OPEN-1  | RESOLVED      | **OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)** (decision S0-05-OPEN-1). Applies to the deployment history through 2026-11-17; reopen and reassess if contradictory deployment evidence appears. Not an acceptance signature and not a closure.                                                                                                                       |
 
 ## 12. Technical recommendation and sign-off
 
-**TECHNICAL ACCEPTANCE RECOMMENDED, with one NOT VERIFIED item (OPEN-1, migration `0002` release state) that must be closed with evidence or by a separate, explicit Owner waiver decision that amends final approval section 4.** The implementation meets Q1 to Q10, the evidence above was produced by commands that were
-actually executed on a fresh clone of the final head, the final-head Codex review reported no major issue, and the cited technical report raised no BLOCKER or MAJOR finding about the code or architecture (OPEN-1 is listed
-separately and is not covered by that statement).
+**TECHNICAL ACCEPTANCE RECOMMENDED.** OPEN-1, the release state of migration `0002`, is resolved by Owner confirmation (2026-11-17). The implementation meets Q1 to Q10, the evidence above was produced by commands that were
+actually executed on a fresh clone of the final head, the final-head Codex review reported no major issue, and the cited technical report raised no BLOCKER or MAJOR finding about the code or architecture.
 
 This is the implementation engineer's recommendation. **It is not the Engineering Owner's acceptance.**
 

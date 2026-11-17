@@ -10,13 +10,13 @@ closes nothing and records no Owner decision that the Owner has not made.
 
 ## 1. Status ladder
 
-| Level                                          | State                               | Basis                                                                                                                                                                   |
-| ---------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IMPLEMENTATION MERGED                          | **YES**                             | PR #6 merged 2026-11-16T08:52:03Z, merge commit `f8bb094`, final implementation `2c11d93`; `main` tree equals the PR head                                               |
-| Merge authorised by the Engineering Owner      | **YES**                             | Established fact, not re-examined by this record; the merge was performed by account `telliex`                                                                          |
-| TECHNICAL ACCEPTANCE RECOMMENDED               | **YES, with one NOT VERIFIED item** | Implementation engineer's recommendation, based on executed commands on a fresh clone and the final-head Codex review; OPEN-1 (release state of `0002`) is NOT VERIFIED |
-| ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF | **YES, pending**                    | The sign-off block of the acceptance record is empty; only the Engineering Owner can complete it                                                                        |
-| CLOSURE PENDING                                | **YES, pending**                    | See the closure conditions in section 4                                                                                                                                 |
+| Level                                          | State            | Basis                                                                                                                                                                        |
+| ---------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IMPLEMENTATION MERGED                          | **YES**          | PR #6 merged 2026-11-16T08:52:03Z, merge commit `f8bb094`, final implementation `2c11d93`; `main` tree equals the PR head                                                    |
+| Merge authorised by the Engineering Owner      | **YES**          | Established fact, not re-examined by this record; the merge was performed by account `telliex`                                                                               |
+| TECHNICAL ACCEPTANCE RECOMMENDED               | **YES**          | Implementation engineer's recommendation, based on executed commands on a fresh clone and the final-head Codex review; OPEN-1 is resolved by Owner confirmation (2026-11-17) |
+| ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF | **YES, pending** | The sign-off block of the acceptance record is empty; only the Engineering Owner can complete it                                                                             |
+| CLOSURE PENDING                                | **YES, pending** | See the closure conditions in section 4                                                                                                                                      |
 
 ## 2. What was delivered
 
@@ -34,7 +34,7 @@ plan aligned to the Owner's final approval.
   4/4. Five repeated API runs: 43/43.
 - Migration checksums: `0001` `c9add3b0…` (unchanged, equals `main`); `0002` `b4914ddb…`.
 - Final-head Codex review (`2c11d93`): no major issues. Earlier findings were fixed (`ce44e01` for the last one).
-- The technical report cited here raised **no BLOCKER and no MAJOR finding about the code or architecture**. That statement does not cover OPEN-1, which is NOT VERIFIED and is a separate matter.
+- The technical report cited here raised **no BLOCKER and no MAJOR finding about the code or architecture**. OPEN-1 (release state of `0002`) was a separate matter and is resolved by Owner confirmation (2026-11-17).
 
 ### Known MINOR findings (four)
 
@@ -46,13 +46,13 @@ plan aligned to the Owner's final approval.
 | MINOR-4 | `save` re-reads stored links to find the new one; passing the link explicitly would remove a query                                                                                 |
 
 Informational items (naming of `externalExecutionReference`, the composition-level clock option, local-only results, the
-published `0001` comment) and the NOT VERIFIED item are in the acceptance record, section 11.
+published `0001` comment) are in the acceptance record, section 11.
 
-### NOT VERIFIED
+### OPEN-1 (resolved)
 
-| ID     | Item                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OPEN-1 | Release state of migration `0002`. **Accepting the risk is a different decision from completing the verification; neither is implied by signing the acceptance record (G1).** The repository shows `0002` was not on `main` before PR #6 merged, but **no deployment or migration history of any shared, staging or production environment was available or checked**, which final approval section 4 asks to be verified and recorded. NOT VERIFIED. |
+| ID     | Item                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OPEN-1 | **OPEN-1: RESOLVED — OWNER CONFIRMED (2026-11-17)**. Release state of migration `0002`: the Engineering Owner confirmed that SDRIS has used only personal local development databases and that no non-personal database environment applied `0002` (decision S0-05-OPEN-1). The merged `0002` (`b4914ddb…`) is retained; no corrective migration, reset or database modification is authorised. Scope: deployment history through 2026-11-17; reopen and reassess if contradictory evidence appears. This is not an Architecture Acceptance signature and does not close S0-05. |
 
 ## 4. Closure gates
 
@@ -60,12 +60,12 @@ published `0001` comment) and the NOT VERIFIED item are in the acceptance record
 
 ### 4.1 Proposed closure gates (all must be satisfied to close S0-05)
 
-| #   | Gate                                                                                                                                                                                                                                                                                                                                                                                                                                   | State | Owner |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----- |
-| G1  | The Engineering Owner completes the sign-off block (section 12) of the [Architecture Acceptance record](S0-05-architecture-acceptance.md)                                                                                                                                                                                                                                                                                              | open  | ☐     |
-| G2  | The Owner decides what to do with the four MINOR findings: fix now, defer to a named task, or accept as is                                                                                                                                                                                                                                                                                                                             | open  | ☐     |
-| G3  | OPEN-1 is closed in **one of two ways, each recorded explicitly**: (a) the Owner supplies the deployment and migration history showing that no shared or production environment applied an earlier `0002`, and the evidence is recorded; or (b) the Owner records a **separate waiver decision that expressly amends the condition of final approval section 4** (see 4.3). A general acceptance sign-off (G1) does **not** satisfy G3 | open  | ☐     |
-| G4  | The ADR-025 approval checklist reflects the merged state and current evidence (refreshed in this branch, pending review and an authorised commit)                                                                                                                                                                                                                                                                                      | open  | ☐     |
+| #   | Gate                                                                                                                                                                                                                                                                                             | State                                                                                                                                                                                                                                                                                        | Owner            |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| G1  | The Engineering Owner completes the sign-off block (section 12) of the [Architecture Acceptance record](S0-05-architecture-acceptance.md)                                                                                                                                                        | open                                                                                                                                                                                                                                                                                         | ☐                |
+| G2  | The Owner decides what to do with the four MINOR findings: fix now, defer to a named task, or accept as is                                                                                                                                                                                       | open                                                                                                                                                                                                                                                                                         | ☐                |
+| G3  | OPEN-1 is closed with evidence or by a separate waiver decision that amends final approval section 4 (see 4.3). A general acceptance sign-off (G1) does not satisfy G3. **Outcome: satisfied by the Owner's environment confirmation of 2026-11-17 (decision S0-05-OPEN-1); no waiver was used** | **done** (Owner confirmation, 2026-11-17)                                                                                                                                                                                                                                                    | ☑ (S0-05-OPEN-1) |
+| G4  | The ADR-025 approval checklist reflects the merged state and current evidence                                                                                                                                                                                                                    | **content done**: refreshed in `a99699c`, OPEN-1 synchronised in the OPEN-1 resolution commit. **Not yet complete as a gate:** the documents are on the local branch `docs/s0-05-acceptance-closure` only (not pushed, no PR, not on `main`), and the Owner has not reviewed or confirmed G4 | ☐                |
 
 ### 4.2 Tracked separately, not proposed as closure gates
 
@@ -78,7 +78,7 @@ published `0001` comment) and the NOT VERIFIED item are in the acceptance record
 
 If the Owner decides that T1 (or any other item) is also a gate, this table is the only place to change.
 
-### 4.3 If the Owner chooses to waive the verification (G3 option b)
+### 4.3 Waiver template for G3 option b (not used: OPEN-1 was resolved by Owner confirmation)
 
 A waiver changes the condition set by final approval section 4 ("verify the deployment and migration history, confirm no shared
 environment depends on the existing checksum, record the evidence"). It is therefore recorded as its **own decision**, not as
