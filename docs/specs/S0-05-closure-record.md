@@ -78,7 +78,7 @@ published `0001` comment) are in the acceptance record, section 11.
 | G1 | Satisfied locally | Engineering Owner accepted with conditions in [architecture acceptance section 12](S0-05-architecture-acceptance.md). |
 | G2 | Satisfied locally | The Owner deferred all four findings to the named tasks in [MINOR follow-up](S0-05-minor-follow-up.md). The tasks remain open and unscheduled. |
 | G3 | Satisfied | OPEN-1 was resolved by the Owner's environment confirmation; reopen if contradictory evidence appears. |
-| G4 | Satisfied | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the gate after that check. |
+| G4 | Satisfied | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the proposed gate; the merged state was subsequently checked. |
 
 The G1 and G2 records are currently on a local branch, not yet merged. The closure decision remains separate and has not been recorded.
 
