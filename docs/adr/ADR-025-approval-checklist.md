@@ -382,11 +382,11 @@ change applied, before the first Status commit.**
 
 ### Phase 3 - for each accepted record R, in the Owner's order
 
-| Step | Commit subject                                                | Touches only                                                                                                                                                                         |
-| ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2    | `docs(adr): add the effective policy of <R>`                  | `docs/adr/ADR-025-effective-policy.md`: created by the first such commit, afterwards **append-only** (a new section per record, earlier sections never edited)                       |
-| 3    | `docs(adr): accept <R>`                                       | **R's Status line** and the mirrors of that same value: the ADR README index row (ADR-025 only) and R's "Current status" cell in this checklist. Nothing else                        |
-| 4    | `docs(adr): record the status commit of <R> in the checklist` | Only R's sign-off field "Status commit" (the SHA of step 3 cannot be known inside step 3). Always its own commit, made right after step 3, never merged into another record's step 1 |
+| Step | Commit subject                                                | Touches only                                                                                                                                                                                                               |
+| ---- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2    | `docs(adr): add the effective policy of <R>`                  | `docs/adr/ADR-025-effective-policy.md`: created by the first such commit, afterwards **append-only** (a new section per record, earlier sections never edited)                                                             |
+| 3    | `docs(adr): accept <R>`                                       | **R's Status line** and the mirrors of that same value: the ADR README index row (ADR-025 only) and R's "Current status" cell in this checklist. Nothing else                                                              |
+| 4    | `docs(adr): record the status commit of <R> in the checklist` | Only R's sign-off field "Status commit" (the SHA of step 3 cannot be known inside step 3). Always its own commit, made right after step 3 (rule 7 fixes the A1 and A2 sequence), never merged into another record's step 1 |
 
 **Rules.**
 
@@ -407,3 +407,18 @@ change applied, before the first Status commit.**
 5. **Security.** Approving a record is not security acceptance; see OBL-SEC-1 above.
 6. **S0-06 does not start** until the Engineering Owner has signed off the S0-05 acceptance and closed S0-05; there is no
    earlier exception. No merge or push is authorised by this checklist.
+7. **A1–A2 controlled governance batch** (approved by the Engineering Owner). The A1 and A2 transitions are performed as exactly
+   four commits, in this fixed order:
+   1. the A1 Status transition commit (`docs(adr): accept A1`);
+   2. the A1 Status commit SHA backfill commit (step 4 for A1);
+   3. the A2 Status transition commit (`docs(adr): accept A2`);
+   4. the A2 Status commit SHA backfill commit (step 4 for A2).
+
+   These four commits constitute one controlled governance batch. **The A1 SHA backfill is the only permitted intervening commit
+   between the A1 and A2 Status transitions.** No unrelated commits, deployments, releases or architectural changes may occur
+   during the batch. A1 and A2 remain independently governed records, and each becomes effective only upon its own Status
+   transition commit. The architecture checker already enforces the A2-expanded Rule 3; the temporary discrepancy between A1's
+   effective policy and the checker's behaviour is acknowledged and is **not authorisation to activate A2 early**. If any step
+   fails, stop and report the issue; do not skip, reorder or automatically repair the sequence. This rule does not change the
+   approval dependencies of ADR-025, A3 or A4. The effective-policy commits of A1 and A2 (step 2) are already made and are not part
+   of the batch.
