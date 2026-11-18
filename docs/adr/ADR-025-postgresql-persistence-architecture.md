@@ -6,7 +6,7 @@
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
 - **Related:** ADR-024, AGENTS.md, CLAUDE.md
 - **Implementation Reference:** PR #5 — S0-04 PostgreSQL & Migration Baseline
-- **Proposed amendments:** A1 — S0-05 persistence dependency policy; A2 — dedicated composition entry point (revises A1 Rule 3); A3 — test-only entrypoints; A4 — compiled runtime packaging. All are below. **PROPOSED, pending Engineering Owner approval.**
+- **Proposed amendments:** A1 — S0-05 persistence dependency policy; A2 — dedicated composition entry point (revises A1 Rule 3); A3 — test-only entrypoints; A4 — compiled runtime packaging. All are below. **Each has its own Status line, which is authoritative; this header line does not state a status.**
 
 ## 1. Context
 

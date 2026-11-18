@@ -1,7 +1,7 @@
 # ADR-025 and S0-05 — Engineering Owner Approval Checklist
 
 **Status of this checklist:** a working document for the Engineering Owner. It records evidence and open points; it
-approves nothing. **No document below is marked ACCEPTED.** A document changes status only after the Engineering Owner's
+approves nothing. **Each document's own Status line is authoritative; statements about status in this checklist are dated snapshots (at the last refresh no document below was marked ACCEPTED).** A document changes status only after the Engineering Owner's
 explicit written approval is recorded in that document's sign-off block below, and the status change is then made in its own
 commit.
 
@@ -28,7 +28,7 @@ ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [proposed persistence policy](../specs/S0-05-proposed-persistence-policy.md) and the
 [FailureObservation removal plan](../specs/S0-05-failureobservation-removal-plan.md).
 
-**Effective order** (see the [decision package](ADR-025-decision-package.md), section 1.1): each record is approved separately and
+**Effective order and workflow** (the workflow, with its phases, is defined once, in "Approval workflow" at the end of this checklist; the [decision package](ADR-025-decision-package.md) section 1.1 gives the reasons): each record is approved separately and
 takes effect only from its own recorded approval. Only two dependencies are binding: ADR-025 may be accepted first, with
 **Decision 5 recorded as still CONDITIONAL until A2 is ACCEPTED**; and **A2 takes effect only after A1 is ACCEPTED**, because it
 revises A1 Rule 3. A3 and A4 are independent. Suggested reading order: 1, 2, 3, 4, 5. The specification (6) is already approved.
@@ -83,7 +83,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in (link or commit): ______________
 
-Status line updated in commit: ______________ (only after this block is complete)
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
 ---
 
@@ -113,7 +113,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
 
-Status line updated in commit: ______________
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
 ---
 
@@ -144,7 +144,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
 
-Status line updated in commit: ______________
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
 ---
 
@@ -172,7 +172,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
 
-Status line updated in commit: ______________
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
 ---
 
@@ -200,7 +200,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
 
-Status line updated in commit: ______________
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
 ---
 
@@ -245,7 +245,7 @@ Changes required: ______________________________________________
 
 Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
 
-Status line updated in commit: ______________
+_Note: the Owner's decision on the specification is already recorded in the final approval v1.0, and the specification's own Status line was set in `814e8d3`. This block stays blank unless the Owner wants a separate sign-off here; the new workflow below applies to ADR-025 and A1 to A4 only._
 
 ---
 
@@ -268,15 +268,80 @@ Approver (Engineering Owner): ______________ Date: __________ Recorded in: _____
 
 ---
 
-## After approval
+## Outstanding obligations (not approval gates)
 
-1. Record each decision in the sign-off block of its own record and, for S0-05 decisions, in the Owner Decision Register.
-2. **Done:** the editorial corrections listed in the decision package (sections 4, 5 and 9) and the A3/A4 clarification were
-   committed together in one documentation-only commit that changes no Status line and no rule. A1 to A4 share the ADR-025
-   file, so after the first status change it is not edited in place again.
-3. Then change statuses one record per commit (`docs(adr): accept ...`), never together with code; **each commit changes only
-   that record's own Status line**. When A2 is accepted, A2's effective-policy record states how A2.6 satisfies Decision 5's
-   condition; ADR-025's text is not edited.
-4. Maintain an effective-policy summary for each accepted record.
-5. S0-06 does not start until the Engineering Owner has signed off the S0-05 acceptance and closed S0-05; there is no earlier
-   exception. No merge is authorised by this checklist.
+| ID        | Obligation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Due                                  | State |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ----- |
+| OBL-SEC-1 | Security triage of the **22 production dependency advisories** (10 high, 10 moderate, 2 low, 0 critical, `pnpm audit --prod`, 2026-11-17; detail in the [decision package](ADR-025-decision-package.md) section 3.1): determine reachability, review patched versions and compatibility, record remediation or an **explicit Owner risk acceptance**, re-run the audit. No exemption exists, no framework upgrade has been performed, and any major-version upgrade needs separate Owner approval (`CLAUDE.md` section 4). | **Before any production deployment** | open  |
+
+This is **not** an approval gate for ADR-025, A1 to A4, the S0-05 closure or S0-06. **Accepting an ADR is not security acceptance**
+(ADR-025 section 14): approving any record in this checklist neither accepts nor waives these advisories.
+
+---
+
+## Approval workflow (authoritative)
+
+Applies to ADR-025 and to each of A1 to A4. Fixed before it starts: the editorial corrections are committed (`07f1068`), and
+**no approval is inferred** from anything in this repository. Every commit has one purpose; no commit mixes steps or records or
+includes code.
+
+**Order.** The Owner chooses the order of acceptance, subject to two dependencies only: ADR-025 may go first (Decision 5 then
+stays CONDITIONAL), and **A2 only after A1 is ACCEPTED**. A3 and A4 are independent.
+
+### Phase 0 - settle G-1 (before any step 2 or 3)
+
+The ADR README forbids editing an accepted ADR in place, while A1 to A4 sit in the ADR-025 file (open governance question
+**G-1**, [decision package](ADR-025-decision-package.md) section 11). **No effective-policy commit and no Status commit may be
+made until the Owner has explicitly chosen option A or B _and_ the chosen resolution is committed in its own commit**: for
+option A, the README conventions of decision package section 10.3; for option B, the split of A1 to A4 into their own files.
+Phase 1 (recording decisions) may proceed meanwhile.
+
+### Phase 1 - record the Owner's decisions (all five, before any Status commit)
+
+For each record R, one commit `docs(adr): record the Owner decision on <R>`, touching only R's sign-off block in this checklist,
+filled from an **explicit, quoted Owner statement** (decision, conditions, approver, date, where recorded). The implementation
+engineer never fills it unprompted. What happens next depends on the decision:
+
+| Decision recorded     | Consequence                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| APPROVED              | R continues to Phase 3                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| APPROVED WITH CHANGES | The required changes are made in `docs/adr/`**before the first Status commit** (Phase 2), in a commit `docs(adr): apply the Owner's required changes to <R>`, and the Owner confirms in writing, in R's sign-off block, that they are satisfied. A condition that is not a text change must be satisfied before Phase 3, **or the Owner explicitly records that R takes effect with the condition open**, and R's effective-policy entry then states the open condition |
+| REJECTED              | R stops: no effective-policy entry, no Status commit. The README has no REJECTED status value, so R stays PROPOSED unless the Owner separately decides how to mark it. Records that depend on R are re-opened (A2 depends on A1; ADR-025 Decisions 4 to 6 depend on A1 and A2) and cannot proceed                                                                                                                                                                       |
+
+Because the ADR-025 file is frozen after its first Status commit, **all five decisions are recorded, and every required text
+change applied, before the first Status commit.**
+
+### Phase 2 - one-off preparation, before the first Status commit
+
+1. The required changes of any APPROVED WITH CHANGES record, if any (see above).
+2. **Snapshot wording (done in the governance-consistency commit):** the ADR-025 header line that listed the amendments as
+   PROPOSED and the opening sentence of this checklist no longer state a status; they point to each record's own Status line, so
+   no summary statement has to be maintained after a Status change (exact wording in decision package section 10.4).
+
+### Phase 3 - for each accepted record R, in the Owner's order
+
+| Step | Commit subject                                                | Touches only                                                                                                                                                                         |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2    | `docs(adr): add the effective policy of <R>`                  | `docs/adr/ADR-025-effective-policy.md`: created by the first such commit, afterwards **append-only** (a new section per record, earlier sections never edited)                       |
+| 3    | `docs(adr): accept <R>`                                       | **R's Status line** and the mirrors of that same value: the ADR README index row (ADR-025 only) and R's "Current status" cell in this checklist. Nothing else                        |
+| 4    | `docs(adr): record the status commit of <R> in the checklist` | Only R's sign-off field "Status commit" (the SHA of step 3 cannot be known inside step 3). Always its own commit, made right after step 3, never merged into another record's step 1 |
+
+**Rules.**
+
+1. **The effective-policy file is a traceability summary, not an ADR.** It has no Status of its own: each section takes effect
+   only with the Status commit of the record it summarises ("in force from the Status commit of R; not in force before it"), so
+   sections of different records legitimately have different effective dates. Its header states the document type, Decision
+   Owner, Scope and Related documents. It says what is in force and under which conditions (for A2: after A1) and adds
+   traceability, **never a new rule**. If it ever disagrees with the ADR text, the ADR text prevails.
+2. **Accepted decision text is not edited.** After the first Status commit the ADR-025 file changes only by the Status line (and
+   mirrors) of the record being accepted. A1 to A4 text is frozen from `07f1068` (plus any Phase 2 required changes). A change of
+   substance afterwards needs a new ADR or a superseding revision, never an edit.
+3. **Status mirrors are limited to step 3.** Apart from each record's own Status line and the two designated mirrors (the ADR
+   README index row and the record's "Current status" cell in this checklist's table), every statement about a status is a
+   **dated snapshot**: the acceptance record, the closure record, the readiness summary, the decision package and this
+   checklist's prose included. Each record's Status line is authoritative, and status commits do not update snapshots.
+4. **Decision 5.** Its historical wording stays CONDITIONAL in ADR-025 for good. A2.6 provides the evaluation. The condition is
+   satisfied when A2 is in force, through A2's section of the effective-policy file. ADR-025 is never rewritten.
+5. **Security.** Approving a record is not security acceptance; see OBL-SEC-1 above.
+6. **S0-06 does not start** until the Engineering Owner has signed off the S0-05 acceptance and closed S0-05; there is no
+   earlier exception. No merge or push is authorised by this checklist.
