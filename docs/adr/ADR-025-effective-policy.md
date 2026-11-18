@@ -139,3 +139,67 @@ Status line and the mirrors of the same value (A1's "Current status" cell in the
 - **Transitional fact, stated for traceability:** the architecture checker as merged already enforces Rule 3 as revised by A2
   (composition is allowed to import same-context infrastructure). Between the Status commits of A1 and A2 the documented A1 Rule
   3 is therefore narrower than the checker's behaviour; the A2 section states when the widening takes effect.
+
+---
+
+## A2 — Dedicated composition entry point (revises A1 Rule 3)
+
+**In force from:** the Status commit `docs(adr): accept A2` (not before it). **Precondition: A1 was ACCEPTED before it.**
+
+### Owner decision
+
+**APPROVED WITH CONDITIONS**, decided by the Engineering Owner on 2026-11-17 and recorded in the approval checklist, section 3
+(commit `0a0577f`): accept the dedicated composition entry point and the revision to A1 Rule 3. Conditions: A2 becomes effective
+only after A1 is accepted; A2.6 supplies the evaluation satisfying ADR-025 Decision 5 once A2 becomes effective. No change to the
+record's text was required.
+
+### Applicable rules
+
+Source: the ADR-025 file, "Proposed Amendment A2", sections A2.1 to A2.4 (the amendment text prevails).
+
+- **Revision of A1 Rule 3.** Same-context infrastructure may be imported from `src/infrastructure/**` **and**
+  `src/composition/**`, and from no other path. Every other path stays forbidden, so the full-path restriction exercised by
+  fixtures 29f and 29g is unchanged. All other A1 rules stand.
+- **A2.2 rules.** (1) `src/composition/**` is a separate module zone. (2) Same-context infrastructure only from
+  `src/infrastructure/**` and `src/composition/**`. (3) Only `src/composition/**` may import the composition zone. (4) Exactly one
+  extra entrypoint `@sdris/<context>/composition`; `.` and `main` stay under `src/public/**`. (5) Only roots listed in
+  `compositionRoots` may import that subpath (initially `apps/api/src/composition/**` for Investigation). (6) The composition zone
+  may import the database contract only as a type, never Drizzle or a driver. (7) The entrypoint exposes factories and contracts,
+  never adapters. (8) `src/public/**` stays independent of composition and infrastructure. (9) Cross-context restrictions are
+  unchanged.
+- **A2.3 factory contract.** Explicit return types that are public contracts; a factory's reachable type surface names no adapter,
+  no infrastructure type, no Drizzle or driver type, and no `@sdris/database` symbol other than the opaque `PersistenceHandle`.
+- **A2.4 enforcement.** `boundary/composition-inversion`, `boundary/infrastructure-inversion`, `dependency/composition-access`,
+  `dependency/direction`, `dependency/forbidden-external`, `composition/adapter-exposure`, `package/entrypoint-location`,
+  `composition/explicit-return-type`, and the type-surface and declaration-leak rules.
+
+### Dependencies and activation conditions
+
+- **A1 must be ACCEPTED before A2's Status commit.** A2 revises a rule of A1 and cannot revise a rule that is not in force. If A1
+  is revised in substance, A2 is re-based before it is activated.
+- The ordering is enforced by the order of the Phase 3 Status commits; nothing else activates A2.
+- From A2's Status commit, A1 Rule 3 is read as revised above. Before it, A1 Rule 3 stands as written in A1.
+
+### Status transition that activates this policy
+
+The `Status` bullet of "Proposed Amendment A2" in the ADR-025 file changes from
+`PROPOSED — Pending Engineering Owner Approval` to `ACCEPTED`, in the commit whose subject is `docs(adr): accept A2`, made after
+A1's Status commit. The commit changes only that Status line and the mirrors of the same value (A2's "Current status" cell in the
+approval checklist).
+
+### ADR-025 Decision 5 — satisfaction of the condition
+
+ADR-025 Decision 5 (historical wording, unchanged in ADR-025): "CONDITIONAL — Retain the current infrastructure-owned transaction
+abstraction until its application-facing contract is validated in S0-05." **Evaluation:** A2.6. **Satisfaction:** with this
+section in force the condition is satisfied. The infrastructure-owned `UnitOfWork` is retained, the application-facing port is the
+Investigation-owned `TransactionScope` in `src/application/ports`, nothing was moved into the Shared Kernel, and the question is
+revisited when a second context needs the same shape. **Before this section is in force the condition is not satisfied. ADR-025
+is not rewritten.**
+
+### Limitations and deferred obligations
+
+- A2.5: type surfaces verify declared types, not behaviour; one documented equivalent mutant (the composition-root package check
+  is implied by the path check); adapter tests must live under `src/infrastructure/**`.
+- A2.7, not decided here: whether `apps/worker` becomes a composition root (it is not authorised); compiled runtime packaging
+  (addressed by A4); the final home of a shared transaction contract; the Investigation aggregate itself (defined by the approved
+  S0-05 specification, not by this amendment).
