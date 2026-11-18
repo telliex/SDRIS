@@ -1,16 +1,15 @@
-# S0-05 — Closure Record (DRAFT)
+# S0-05 — Closure Record
 
 > **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
 
-**Status:** DRAFT — **CLOSURE PENDING.** This record separates what has happened from what has only been recommended. It
-closes nothing and records no Owner decision that the Owner has not made.
+**Status:** CLOSED WITH CONDITIONS — Engineering Owner decision recorded 2026-11-17 on this local branch. The decision and supporting acceptance records are not yet merged to `main`.
 
 **Milestone:** S0-05 — Investigation Aggregate Foundation  
 **Evidence:** [S0-05-architecture-acceptance.md](S0-05-architecture-acceptance.md)  
 **Decisions:** [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md) (v1.0)  
 **ADR decisions:** [ADR-025 decision package](../adr/ADR-025-decision-package.md)
 
-> **Update (2026-11-17):** PR #7 merged the approval checklist to `main` at `fec9c18`. The Engineering Owner agreed to G1–G4 as closure gates and to architecture acceptance with conditions. G4 was checked against the merged ADR Status lines and index. The four MINOR findings are deferred in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md), with Claude Code as executor when requested and the Engineering Owner as reviewer; dates remain unscheduled. G2 is satisfied by the recorded disposition; closure remains pending the separate Owner closure decision. The table below preserves the earlier snapshot.
+> **Update (2026-11-17):** PR #7 merged the approval checklist to `main` at `fec9c18`. The Engineering Owner agreed to G1–G4 as closure gates and to architecture acceptance with conditions. G4 was checked against the merged ADR Status lines and index. The four MINOR findings are deferred in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md), with Claude Code as executor when requested and the Engineering Owner as reviewer; dates remain unscheduled. G2 is satisfied by the recorded disposition. The Owner subsequently decided CLOSED WITH CONDITIONS; see section 7. The table below preserves the earlier snapshot.
 
 ## 1. Status ladder
 
@@ -80,7 +79,7 @@ published `0001` comment) are in the acceptance record, section 11.
 | G3 | Satisfied | OPEN-1 was resolved by the Owner's environment confirmation; reopen if contradictory evidence appears. |
 | G4 | Satisfied | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the proposed gate; the merged state was subsequently checked. |
 
-The G1 and G2 records are currently on a local branch, not yet merged. The closure decision remains separate and has not been recorded.
+The G1 and G2 records and the separate closure decision are currently on a local branch, not yet merged.
 
 ### 4.2 Tracked separately, not proposed as closure gates
 
@@ -137,8 +136,8 @@ An outstanding obligation, **tracked separately from the closure gates** and not
 
 ## 7. Sign-off
 
-Closure decision: ☐ CLOSED ☐ CLOSED WITH CONDITIONS ☐ NOT CLOSED
+Closure decision: ☐ CLOSED ☑ CLOSED WITH CONDITIONS ☐ NOT CLOSED
 
-Conditions: ______________________________________________
+Conditions: MINOR-1 through MINOR-4 remain open and are tracked in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md). Claude Code may execute the tasks when requested; the Engineering Owner reviews the results. Scheduling remains open.
 
-Engineering Owner: ______________ Date: __________ Recorded in (link or commit): ______________
+Engineering Owner: Engineering Owner, by explicit instruction in the project conversation. Date: 2026-11-17. Recorded in: this sign-off.

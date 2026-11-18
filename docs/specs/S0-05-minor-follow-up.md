@@ -1,6 +1,6 @@
 # S0-05 — MINOR Findings Follow-up
 
-**Decision:** The Engineering Owner agreed on 2026-11-17 in the project conversation to defer the four MINOR findings to the named follow-up tasks below, as conditions of S0-05 architecture acceptance. This record does not claim that the findings have been fixed or that S0-05 is closed. Claude Code may execute each task when requested; the Engineering Owner reviews and decides whether to accept the result. Scheduling remains open.
+**Decision:** The Engineering Owner agreed on 2026-11-17 in the project conversation to defer the four MINOR findings to the named follow-up tasks below, as conditions of S0-05 architecture acceptance. The findings have not been fixed; the subsequent conditional closure decision is recorded in the [closure record](S0-05-closure-record.md). Claude Code may execute each task when requested; the Engineering Owner reviews and decides whether to accept the result. Scheduling remains open.
 
 | Task | Finding | Intended outcome | Execution and review | Schedule | State |
 | --- | --- | --- | --- | --- | --- |
