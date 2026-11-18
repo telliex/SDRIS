@@ -1,6 +1,8 @@
 # ADR-025: PostgreSQL Persistence Architecture & Migration Governance
 
-- **Status:** ACCEPTED
+- **Status:** ACCEPTED — approved with conditions by the Engineering Owner on 2026-11-17: Decision 5 remains CONDITIONAL until
+  Amendment A2 is effective, Decision 7 remains deferred, and the dependency-security obligation OBL-SEC-1 remains open (see
+  `ADR-025-effective-policy.md`). Approving this ADR does not approve Amendments A1 to A4, which have their own Status lines.
 - **Date:** 2026-11-15
 - **Decision Owner:** SDRIS Engineering Owner
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
@@ -491,8 +493,8 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
 
 ## Proposed Amendment A1 — Persistence Dependency Policy for S0-05
 
-- **Status:** ACCEPTED. This amendment does not change the status of ADR-025
-  and is not in force until the Engineering Owner approves it in writing.
+- **Status:** ACCEPTED — approved by the Engineering Owner on 2026-11-17; in force from its own Status commit. This amendment
+  does not change the status of ADR-025.
 - **Resolves:** the open points about Decisions 4 and 6 (where a repository adapter lives, whether it may import
   `drizzle-orm` directly, and how "approved infrastructure-layer imports" is decided).
 - **Implementation reference:** branch `feat/s0-05-persistence-dependency-policy`, merged to `main` through PR #6
@@ -589,8 +591,9 @@ the manifest check each turns fixtures red.
 
 ## Proposed Amendment A2 — Dedicated Composition Entry Point
 
-- **Status:** ACCEPTED. It does not change the status of ADR-025 or of
-  Amendment A1, and nothing in it is in force until the Engineering Owner approves it in writing.
+- **Status:** ACCEPTED — approved with conditions by the Engineering Owner on 2026-11-17; in force from its own Status commit,
+  which follows A1's (it became effective only after A1 was accepted). It does not change the status of ADR-025 or of
+  Amendment A1.
 - **Revises Amendment A1, Rule 3.** A1 Rule 3 said that only `src/infrastructure/**` may import a module's own
   `src/infrastructure/**`. A2 widens that to `src/infrastructure/**` **and** `src/composition/**`. Every other path
   (`src/domain`, `src/application`, `src/public`, `src/helpers`, `src/shared`, `test/`, and so on) remains forbidden, so
@@ -717,7 +720,8 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 
 ## Proposed Amendment A3 — Test-Only Entrypoints
 
-- **Status:** ACCEPTED. Not in force until approved in writing.
+- **Status:** ACCEPTED — approved by the Engineering Owner on 2026-11-17; in force from its own Status commit. The restrictions imply no
+  runtime isolation and no exclusion from compiled `dist` output.
 - **Resolves:** `@sdris/database/testing` was exported from a production package with nothing stopping production code
   from importing it (found in review of PR #6; confirmed by experiment).
 - **Rules:**
@@ -741,7 +745,8 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 
 ## Proposed Amendment A4 — Compiled Runtime Packaging
 
-- **Status:** ACCEPTED. Not in force until approved in writing.
+- **Status:** ACCEPTED — approved by the Engineering Owner on 2026-11-17; in force from its own Status commit. Production deployment
+  readiness is not implied.
 - **Resolves:** the composed API could only run under `tsx` because workspace packages resolved to TypeScript sources.
   The S0-05 specification requires compiled composition code to run under supported Node.js without tsx.
 - **Decision (smallest change that works):**
