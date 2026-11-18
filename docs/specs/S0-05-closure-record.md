@@ -10,6 +10,8 @@ closes nothing and records no Owner decision that the Owner has not made.
 **Decisions:** [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md) (v1.0)  
 **ADR decisions:** [ADR-025 decision package](../adr/ADR-025-decision-package.md)
 
+> **Update (2026-11-17):** PR #7 merged the approval checklist to `main` at `fec9c18`. The Engineering Owner agreed to G1–G4 as closure gates and to architecture acceptance with conditions. G4 was checked against the merged ADR Status lines and index. The four MINOR findings are deferred in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md), with owners and schedules pending; G2 and closure remain open. The table below preserves the earlier snapshot.
+
 ## 1. Status ladder
 
 | Level                                          | State            | Basis                                                                                                                                                                        |
