@@ -123,11 +123,18 @@ covered; the Investigation allowlist entry was reviewed with the S0-05 adapter w
 
 **Sign-off**
 
-Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+Decision: ☑ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
 
-Changes required: ______________________________________________
+Changes required: none (no change to the record's text is required).
 
-Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
+Owner statement, quoted from the project conversation of 2026-11-17:
+
+> A1 — APPROVED
+> Accept the persistence dependency policy and context infrastructure allowlist.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-17. Recorded in (link or commit): this checklist, section 2; commit `docs(adr): record the Owner decision on A1`.
+
+This records the decision only: A1 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
