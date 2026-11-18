@@ -77,11 +77,27 @@ Commits: `4dddcbc`, `8b4a2b0` (Decision 5 text), `9f792cd` (index). Related: ADR
 
 **Sign-off**
 
-Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED ☑ **APPROVED WITH CONDITIONS** (the Owner's wording; no change to the record's text is required)
 
-Changes required: ______________________________________________
+Changes required: none (no change to the record's text is required).
 
-Approver (Engineering Owner): ______________ Date: __________ Recorded in (link or commit): ______________
+Conditions and notes recorded by the Owner (non-text):
+
+- Decision 5 remains CONDITIONAL, as written, until A2 becomes effective. This is the Owner's explicit record that ADR-025 takes effect with that condition open; it is satisfied later through A2's effective-policy record, not by editing ADR-025.
+- Decision 7 (audit, outbox, atomic persistence) remains deferred; table ownership and workflow are not decided.
+- OBL-SEC-1 (the 22 dependency advisories) remains open and is not waived; accepting ADR-025 is not security acceptance.
+
+Owner statement, quoted from the project conversation of 2026-11-17:
+
+> ADR-025 — APPROVED WITH CONDITIONS
+> Accept the persistence architecture and migration governance.
+> Decision 5 remains CONDITIONAL until A2 becomes effective.
+> Decision 7 remains deferred.
+> OBL-SEC-1 remains open and is not waived.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-17. Recorded in (link or commit): this checklist, section 1; commit `docs(adr): record the Owner decision on ADR-025`.
+
+This records the decision only: ADR-025 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
