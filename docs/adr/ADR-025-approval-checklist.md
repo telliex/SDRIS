@@ -161,11 +161,25 @@ behaviour; each context currently owns its own `TransactionScope` copy; adapter 
 
 **Sign-off**
 
-Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED ☑ **APPROVED WITH CONDITIONS** (the Owner's wording; no change to the record's text is required)
 
-Changes required: ______________________________________________
+Changes required: none (no change to the record's text is required).
 
-Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
+Conditions and notes recorded by the Owner (non-text):
+
+- A2 becomes effective only after A1 is accepted (an ordering condition, enforced by the order of the Phase 3 Status commits).
+- A2.6 supplies the evaluation satisfying ADR-025 Decision 5 once A2 becomes effective; per the Approval workflow this is recorded in A2's section of the effective-policy file, and ADR-025 is not edited.
+
+Owner statement, quoted from the project conversation of 2026-11-17:
+
+> A2 — APPROVED WITH CONDITIONS
+> Accept the dedicated composition entry point and revision to A1 Rule 3.
+> A2 becomes effective only after A1 is accepted.
+> A2.6 supplies the evaluation satisfying ADR-025 Decision 5 once A2 becomes effective.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-17. Recorded in (link or commit): this checklist, section 3; commit `docs(adr): record the Owner decision on A2`.
+
+This records the decision only: A2 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
