@@ -288,13 +288,14 @@ includes code.
 **Order.** The Owner chooses the order of acceptance, subject to two dependencies only: ADR-025 may go first (Decision 5 then
 stays CONDITIONAL), and **A2 only after A1 is ACCEPTED**. A3 and A4 are independent.
 
-### Phase 0 - settle G-1 (before any step 2 or 3)
+### Phase 0 - G-1 (resolved)
 
-The ADR README forbids editing an accepted ADR in place, while A1 to A4 sit in the ADR-025 file (open governance question
-**G-1**, [decision package](ADR-025-decision-package.md) section 11). **No effective-policy commit and no Status commit may be
-made until the Owner has explicitly chosen option A or B _and_ the chosen resolution is committed in its own commit**: for
-option A, the README conventions of decision package section 10.3; for option B, the split of A1 to A4 into their own files.
-Phase 1 (recording decisions) may proceed meanwhile.
+**G-1 is RESOLVED: the Engineering Owner approved Option A on 2026-11-17.** The ADR and each amendment are independently
+governed records within one file; changing an individual amendment's Status line (and its mirrors) is a permitted lifecycle
+transition even after ADR-025 is accepted; this does not permit editing previously accepted rules, rationale, constraints or
+decision text, and a substantive change needs a new amendment or a superseding ADR. The conventions are recorded in the ADR
+README by the commit `docs(adr): record G-1 amendment lifecycle interpretation`. G-1 therefore no longer blocks effective-policy
+or Status commits; the prerequisites of Phase 1 and Phase 2 still apply.
 
 ### Phase 1 - record the Owner's decisions (all five, before any Status commit)
 

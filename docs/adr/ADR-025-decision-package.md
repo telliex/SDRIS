@@ -41,7 +41,7 @@ approval checklist was refreshed to this baseline and committed (`a99699c`).
 The editorial corrections recommended earlier ("REVISE (editorial)") **have been applied** in the pre-approval documentation-correction commit: only sentences describing the state of the implementation were corrected and **no rule changed**.
 
 **One workflow for every record** is defined once, in "Approval workflow" at the end of the
-[approval checklist](ADR-025-approval-checklist.md), in phases: (0) settle G-1 and commit the chosen resolution; (1) record all
+[approval checklist](ADR-025-approval-checklist.md), in phases: (0) G-1, resolved by the Owner (Option A, 2026-11-17) and recorded in the ADR README; (1) record all
 five Owner decisions, branching on APPROVED, APPROVED WITH CHANGES and REJECTED; (2) apply any required changes; (3) for each
 accepted record, in its own commits: its effective policy, then its Status line (and mirrors), then a bookkeeping commit with the
 status commit's SHA. The exact wording is in section 10.
@@ -220,7 +220,7 @@ Drizzle, the PostgreSQL driver).
    (`07f1068`) that changes no Status line and no rule.
 3. Suggested approval order: ADR-025, A1, A2 (after A1), A3, A4. Only two dependencies between records are binding: ADR-025 may go first with
    Decision 5 still CONDITIONAL, and A2 only after A1.
-4. Follow the **approval workflow** at the end of the checklist: Phase 0 settle G-1 and commit the chosen resolution; Phase 1
+4. Follow the **approval workflow** at the end of the checklist: Phase 0 G-1 (resolved: Option A, recorded in the ADR README); Phase 1
    record all five Owner decisions (branching on APPROVED, APPROVED WITH CHANGES, REJECTED); Phase 2 apply any required changes;
    Phase 3 for each accepted record, in its own commits: effective policy, then Status line (and its mirrors), then the SHA
    bookkeeping. Section 10 gives the exact wording.
@@ -264,7 +264,7 @@ Dependency security: 22 production advisories (10 high, 10 moderate, 2 low, 0 cr
 (OBL-SEC-1) to be triaged before any production deployment. Accepting ADR-025 is not security acceptance and grants no exemption.
 ```
 
-**10.3 Proposed addition to the ADR README conventions (for the Owner to approve; not applied):**
+**10.3 Addition to the ADR README conventions (approved as G-1 Option A and recorded in the ADR README by the G-1 commit; the README wording is authoritative):**
 
 ```text
 - An amendment may live inside its parent ADR file with its own Status line. Changing that Status line, and the mirrors of the
@@ -290,21 +290,22 @@ Approval checklist, opening paragraph, now reads:
    last refresh no document below was marked ACCEPTED)."
 ```
 
-## 11. Remaining governance question for the Owner
+## 11. Governance question G-1 (RESOLVED)
 
-**G-1 — ADR README versus amendments inside the ADR-025 file.** The README says "Do not edit an accepted ADR in place; supersede
+**G-1 — ADR README versus amendments inside the ADR-025 file.** The README said "Do not edit an accepted ADR in place; supersede
 it with a new ADR." A1 to A4 sit in the ADR-025 file, so changing an amendment's Status line after ADR-025 is accepted edits that
 file.
 
-| Option | What it means                                                                                                                                                     | Cost                                                                                                              |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **A**  | Confirm that a Status-line change of an amendment (and its mirrors) is a permitted lifecycle event, not an in-place edit; add the sentences of 10.3 to the README | Smallest; a documented interpretation of the README. **Recommended**                                              |
-| B      | Before any Status change, move A1 to A4 into their own files (for example `ADR-025-A1-...md`), so ADR-025's file is never touched after its acceptance            | Larger: moves about 250 lines and touches the 5 files that link the ADR-025 path plus the many textual references |
+**Resolution: Option A, approved by the Engineering Owner on 2026-11-17.** An individual amendment's Status change (and its
+mirrors) is a permitted lifecycle transition, even after ADR-025 is accepted; it does not permit editing previously accepted
+rules, rationale, constraints or decision text; a substantive change requires a new amendment or a superseding ADR. The
+conventions of 10.3 are recorded in the ADR README by the commit `docs(adr): record G-1 amendment lifecycle interpretation`.
+Phase 0 of the workflow is therefore complete.
 
-**Landing order.** G-1 is settled only when the Owner has explicitly chosen A or B **and** the chosen resolution is committed in its own
-commit: for A, the README sentences of 10.3 (`docs(adr): add the amendment and effective-policy conventions to the ADR README`);
-for B, the split of A1 to A4 into their own files (committed before any Status change, with the references updated). Until then no
-effective-policy commit and no Status commit may be made; recording the Owner's decisions (Phase 1) may proceed.
+| Option | What it meant                                                                                                                                                     | Outcome                                                                                             |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| **A**  | Confirm that a Status-line change of an amendment (and its mirrors) is a permitted lifecycle event, not an in-place edit; add the sentences of 10.3 to the README | **Chosen and recorded**                                                                             |
+| B      | Before any Status change, move A1 to A4 into their own files, so ADR-025's file is never touched after its acceptance                                             | Not chosen (it would have moved about 250 lines and touched the 5 files that link the ADR-025 path) |
 
 **Consequence of the Phase 1 prerequisite (for the Owner to weigh).** The rule "all five decisions are recorded before the first
 Status commit" is an additional workflow prerequisite, not a repair of wording: it exists because the ADR-025 file is frozen after
@@ -316,6 +317,6 @@ need a new rule in the authoritative workflow (the approval checklist), which th
 Owner changes PROPOSED to ACCEPTED: consistent (step 1 records the Owner's decision; step 3 executes it). File naming
 `ADR-NNN-short-title.md`: the effective-policy file `ADR-025-effective-policy.md` follows it. The required ADR header (with a Status)
 does **not** apply to it: it is a traceability summary, not an ADR, with no Status of its own, under the summary-document
-convention of 10.3 (proposed).
+convention of 10.3 (now in the README).
 Executable architecture tests for dependency-boundary changes: not applicable, no rule changes. "Do not edit an accepted ADR in
-place": the one open point, G-1.
+place": consistent through the G-1 resolution (Option A), recorded in the README.
