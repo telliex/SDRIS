@@ -203,11 +203,23 @@ physical inclusion).
 
 **Sign-off**
 
-Decision: ☐ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+Decision: ☑ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
 
-Changes required: ______________________________________________
+Changes required: none (no change to the record's text is required).
 
-Approver (Engineering Owner): ______________ Date: __________ Recorded in: ______________
+Conditions and notes recorded by the Owner (non-text):
+
+- Scope note: the restrictions do not imply runtime isolation or exclusion from compiled dist output.
+
+Owner statement, quoted from the project conversation of 2026-11-17:
+
+> A3 — APPROVED
+> Accept the test-only entrypoint restrictions.
+> These restrictions do not imply runtime isolation or exclusion from compiled dist output.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-17. Recorded in (link or commit): this checklist, section 4; commit `docs(adr): record the Owner decision on A3`.
+
+This records the decision only: A3 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
 
