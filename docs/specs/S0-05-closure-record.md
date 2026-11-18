@@ -75,6 +75,7 @@ published `0001` comment) are in the acceptance record, section 11.
 | T2  | The six outdated review threads on PR #6 (each finding fixed) are resolved or left                                                                        | Review housekeeping; the Codex result on the final head is already recorded                                                                                                                     |
 | T3  | The sprint tracker or Blueprint, which is not in the repository, is updated by its owner                                                                  | Outside the repository                                                                                                                                                                          |
 | T4  | CI for the PostgreSQL tests                                                                                                                               | Deferred to S0-10 by decision                                                                                                                                                                   |
+| T5  | **OBL-SEC-1 — Dependency Security Triage** (section 4.4): the 22 production dependency advisories of the 2026-11-17 audit                                 | A separate obligation due before production deployment; not a gate for ADR approval, S0-05 closure or S0-06 implementation                                                                      |
 
 If the Owner decides that T1 (or any other item) is also a gate, this table is the only place to change.
 
@@ -90,6 +91,19 @@ part of the acceptance sign-off, and states all of the following. This draft fil
 | Disposition (for example: proceed, or verify later by a named person before a named event)   |             |
 | Limitations and compensating controls (for example: no shared environment is known to exist) |             |
 | Decision, approver (Engineering Owner), date, where recorded                                 |             |
+
+### 4.4 OBL-SEC-1 — Dependency Security Triage
+
+An outstanding obligation, **tracked separately from the closure gates** and not a gate for them.
+
+| Item              | Record                                                                                                                                                                                                                                             |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Finding           | **22 advisories** reported by the 2026-11-17 production dependency audit (`pnpm audit --prod`): 10 high, 10 moderate, 2 low, 0 critical; none in a persistence package. Detail: [decision package](../adr/ADR-025-decision-package.md) section 3.1 |
+| Disposition today | **No security risk acceptance or waiver has been granted.** The advisories are neither accepted as safe nor exempted; no framework upgrade has been performed                                                                                      |
+| Requirement       | Security triage is **required before production deployment** (ADR-025 section 14): reachability, patched versions and compatibility, remediation or an explicit Owner risk disposition, and a re-run of the audit                                  |
+| Relation to gates | **Not a gate** for ADR approval, S0-05 closure or S0-06 implementation; approving an ADR or closing S0-05 is not security acceptance                                                                                                               |
+| Tracking          | Remediation or an explicit risk disposition is tracked separately (approval checklist, "Outstanding obligations", `OBL-SEC-1`); any major-version upgrade needs separate Owner approval (`CLAUDE.md` section 4)                                    |
+| State             | **Open**                                                                                                                                                                                                                                           |
 
 ## 5. Explicitly deferred or out of scope
 
