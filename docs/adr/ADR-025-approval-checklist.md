@@ -1,11 +1,13 @@
 # ADR-025 and S0-05 — Engineering Owner Approval Checklist
 
+> **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
+
 **Status of this checklist:** a working document for the Engineering Owner. It records evidence and open points; it
-approves nothing. **Each document's own Status line is authoritative; statements about status in this checklist are dated snapshots (at the last refresh no document below was marked ACCEPTED).** A document changes status only after the Engineering Owner's
+approves nothing. **Each document's own Status line is authoritative; statements about status in this checklist are dated snapshots (at the refresh of commit `a99699c` no document below was marked ACCEPTED; the Phase 3 status transitions came later).** A document changes status only after the Engineering Owner's
 explicit written approval is recorded in that document's sign-off block below, and the status change is then made in its own
 commit.
 
-**State of the repository when this checklist was refreshed:** S0-05 is merged into `main` (PR #6, merge commit `f8bb094`,
+**State of the repository when this checklist was refreshed (snapshot, commit `a99699c`):** S0-05 is merged into `main` (PR #6, merge commit `f8bb094`,
 final implementation `2c11d93`, merge authorised by the Engineering Owner). Merge is not acceptance: the S0-05 Architecture
 Acceptance and closure are **pending** (see section 7), and ADR-025 and A1 to A4 are **PROPOSED**. S0-06 is not started.
 
@@ -290,7 +292,7 @@ section 6): the gates below concern the ADRs and the final acceptance.
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | S0-05 specification approval              | **Done** (APPROVED WITH CHANGES, final approval v1.0)                                                      |
 | S0-05 architecture acceptance and closure | **Pending Owner** (acceptance record section 12; closure record gates, classification proposed)            |
-| ADR-025 and A1 to A4, each individually   | **Independent, PROPOSED**, tracked in sections 1 to 5                                                      |
+| ADR-025 and A1 to A4, each individually   | **Independent**, tracked in sections 1 to 5 (snapshot at `a99699c`: PROPOSED; see each Status line)        |
 | S0-06 start prerequisites                 | As listed in the [readiness summary](../specs/S0-06-readiness-summary.md), section 5; no earlier exception |
 
 **State of the acceptance criteria:** 1 to 10 are met by the implementation and the merged evidence (criteria 7 and 8 by A4 and

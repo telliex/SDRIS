@@ -1,5 +1,7 @@
 # S0-05 — Closure Record (DRAFT)
 
+> **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
+
 **Status:** DRAFT — **CLOSURE PENDING.** This record separates what has happened from what has only been recommended. It
 closes nothing and records no Owner decision that the Owner has not made.
 
