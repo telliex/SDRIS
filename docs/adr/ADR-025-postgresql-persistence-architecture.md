@@ -491,7 +491,7 @@ Deferred to avoid expanding the persistence foundation task into workflow implem
 
 ## Proposed Amendment A1 — Persistence Dependency Policy for S0-05
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval. This amendment does not change the status of ADR-025
+- **Status:** ACCEPTED. This amendment does not change the status of ADR-025
   and is not in force until the Engineering Owner approves it in writing.
 - **Resolves:** the open points about Decisions 4 and 6 (where a repository adapter lives, whether it may import
   `drizzle-orm` directly, and how "approved infrastructure-layer imports" is decided).
