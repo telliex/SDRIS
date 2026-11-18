@@ -249,3 +249,54 @@ changes only that Status line and the mirrors of the same value (A3's "Current s
 - **Owner's scope note:** the restrictions imply **no runtime isolation** and **no exclusion from compiled `dist` output.** The
   `./testing` entrypoint is built into `dist/testing` and published as an entrypoint (A4 clarification); presence in `dist` is not
   a security boundary.
+
+---
+
+## A4 — Compiled runtime packaging
+
+**In force from:** the Status commit `docs(adr): accept A4` (not before it).
+
+### Owner decision
+
+**APPROVED**, decided by the Engineering Owner on 2026-11-17 and recorded in the approval checklist, section 5 (commit `9f29327`):
+accept the compiled runtime packaging policy. Scope note recorded by the Owner: production deployment readiness is not implied.
+No change to the record's text was required.
+
+### Applicable rules
+
+Source: the ADR-025 file, "Proposed Amendment A4" (the amendment text prevails).
+
+1. `shared-kernel`, `database` and `investigation` build independently with `tsc -p tsconfig.build.json` into `dist/`
+   (JavaScript and declarations). The spike helpers `src/testing/spike-store.ts` and `src/testing/script-generator.ts` are
+   excluded from the build; the `./testing` entrypoint itself is built into `dist/testing` and published as an entrypoint, its
+   import restriction being governed by A3.
+2. Every published entrypoint is written `{ "sdris-source": "./src/...ts", "types": "./dist/....d.ts", "default": "./dist/....js" }`;
+   plain Node and TypeScript consumers outside the repository follow `default` and `types`; repository tests and NodeNext type
+   checks use the `sdris-source` condition and need no prior build.
+3. `main`, `types`, `typesVersions`, the package boundaries and the set of entrypoints are unchanged.
+
+- **Guard.** The checker judges the source target and requires `types` and `default` to be its exact dist mirror and rejects other
+  conditions (`package/exports-condition`).
+- **Verification.** `pnpm test:runtime` builds from a clean state and runs the compiled `apps/api` composition root in a plain
+  `node` process (no tsx, no loader flags, no custom conditions) against real PostgreSQL, asserting that no TypeScript source or
+  tsx module was loaded.
+
+### Dependencies and activation conditions
+
+- **No dependency on another record** and no ordering constraint. It resolves a limitation stated in A2.5 but is not a
+  precondition of A2.
+- Activation is the Status transition below; nothing else activates it.
+
+### Status transition that activates this policy
+
+The `Status` bullet of "Proposed Amendment A4" in the ADR-025 file changes from
+`PROPOSED — Pending Engineering Owner Approval` to `ACCEPTED`, in the commit whose subject is `docs(adr): accept A4`. The commit
+changes only that Status line and the mirrors of the same value (A4's "Current status" cell in the approval checklist).
+
+### Limitations and deferred obligations
+
+- **Production deployment readiness is not implied** (Owner's scope note).
+- Each package needs a build before it can run outside `tsx`; the `sdris-source` condition must be passed to `tsx` and set as
+  `customConditions` wherever source resolution is wanted; the API itself is still started by `tsx` in development; no bundling
+  and no publish pipeline are introduced.
+- The smoke test needs PostgreSQL and is not in CI until S0-10.
