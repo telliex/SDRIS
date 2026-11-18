@@ -717,7 +717,7 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 
 ## Proposed Amendment A3 — Test-Only Entrypoints
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval. Not in force until approved in writing.
+- **Status:** ACCEPTED. Not in force until approved in writing.
 - **Resolves:** `@sdris/database/testing` was exported from a production package with nothing stopping production code
   from importing it (found in review of PR #6; confirmed by experiment).
 - **Rules:**
