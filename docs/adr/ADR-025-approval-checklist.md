@@ -99,7 +99,7 @@ Approver (Engineering Owner): Engineering Owner, by explicit instruction in the 
 
 This records the decision only: ADR-025 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
-Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): ______________
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): `bec73812e1509abc63ca275df282fddc1b4e35a0`
 
 ---
 
