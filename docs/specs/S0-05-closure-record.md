@@ -10,7 +10,7 @@ closes nothing and records no Owner decision that the Owner has not made.
 **Decisions:** [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md) (v1.0)  
 **ADR decisions:** [ADR-025 decision package](../adr/ADR-025-decision-package.md)
 
-> **Update (2026-11-17):** PR #7 merged the approval checklist to `main` at `fec9c18`. The Engineering Owner agreed to G1–G4 as closure gates and to architecture acceptance with conditions. G4 was checked against the merged ADR Status lines and index. The four MINOR findings are deferred in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md), with owners and schedules pending; G2 and closure remain open. The table below preserves the earlier snapshot.
+> **Update (2026-11-17):** PR #7 merged the approval checklist to `main` at `fec9c18`. The Engineering Owner agreed to G1–G4 as closure gates and to architecture acceptance with conditions. G4 was checked against the merged ADR Status lines and index. The four MINOR findings are deferred in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md), with Claude Code as executor when requested and the Engineering Owner as reviewer; dates remain unscheduled. G2 is satisfied by the recorded disposition; closure remains pending the separate Owner closure decision. The table below preserves the earlier snapshot.
 
 ## 1. Status ladder
 
@@ -60,7 +60,7 @@ published `0001` comment) are in the acceptance record, section 11.
 
 ## 4. Closure gates
 
-**Proposed classification: the Engineering Owner confirms which items are gates.** None of them is performed by this draft.
+**Owner-confirmed classification:** G1–G4 are the closure gates. The table below preserves the earlier snapshot; the current gate assessment follows it.
 
 ### 4.1 Proposed closure gates (all must be satisfied to close S0-05)
 
@@ -70,6 +70,17 @@ published `0001` comment) are in the acceptance record, section 11.
 | G2  | The Owner decides what to do with the four MINOR findings: fix now, defer to a named task, or accept as is                                                                                                                                                                                       | open                                                                                                                                                                                                                                                                                         | ☐                |
 | G3  | OPEN-1 is closed with evidence or by a separate waiver decision that amends final approval section 4 (see 4.3). A general acceptance sign-off (G1) does not satisfy G3. **Outcome: satisfied by the Owner's environment confirmation of 2026-11-17 (decision S0-05-OPEN-1); no waiver was used** | **done** (Owner confirmation, 2026-11-17)                                                                                                                                                                                                                                                    | ☑ (S0-05-OPEN-1) |
 | G4  | The ADR-025 approval checklist reflects the merged state and current evidence                                                                                                                                                                                                                    | **content done**: refreshed in `a99699c`, OPEN-1 synchronised in the OPEN-1 resolution commit. **Not yet complete as a gate:** the documents are on the local branch `docs/s0-05-acceptance-closure` only (not pushed, no PR, not on `main`), and the Owner has not reviewed or confirmed G4 | ☐                |
+
+**Current gate assessment (2026-11-17, on this local branch):**
+
+| Gate | Assessment | Evidence |
+| --- | --- | --- |
+| G1 | Satisfied locally | Engineering Owner accepted with conditions in [architecture acceptance section 12](S0-05-architecture-acceptance.md). |
+| G2 | Satisfied locally | The Owner deferred all four findings to the named tasks in [MINOR follow-up](S0-05-minor-follow-up.md). The tasks remain open and unscheduled. |
+| G3 | Satisfied | OPEN-1 was resolved by the Owner's environment confirmation; reopen if contradictory evidence appears. |
+| G4 | Satisfied | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the gate after that check. |
+
+The G1 and G2 records are currently on a local branch, not yet merged. The closure decision remains separate and has not been recorded.
 
 ### 4.2 Tracked separately, not proposed as closure gates
 

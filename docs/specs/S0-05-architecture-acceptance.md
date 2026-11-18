@@ -218,6 +218,6 @@ This is the implementation engineer's recommendation. **It is not the Engineerin
 
 Decision: ☐ ACCEPTED ☑ ACCEPTED WITH CONDITIONS ☐ NOT ACCEPTED
 
-Conditions: MINOR-1 to MINOR-4 are deferred to the follow-up tasks in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md); each needs an assigned owner and schedule. OPEN-1 remains resolved on the existing Owner confirmation and must be reopened if contradictory deployment evidence appears.
+Conditions: MINOR-1 to MINOR-4 are deferred to the follow-up tasks in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md); Claude Code may execute them when requested, and the Engineering Owner reviews the results; scheduling remains open. OPEN-1 remains resolved on the existing Owner confirmation and must be reopened if contradictory deployment evidence appears.
 
 Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation. Date: 2026-11-17. Recorded in: this sign-off and [S0-05 MINOR follow-up](S0-05-minor-follow-up.md).
