@@ -741,7 +741,7 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 
 ## Proposed Amendment A4 — Compiled Runtime Packaging
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval. Not in force until approved in writing.
+- **Status:** ACCEPTED. Not in force until approved in writing.
 - **Resolves:** the composed API could only run under `tsx` because workspace packages resolved to TypeScript sources.
   The S0-05 specification requires compiled composition code to run under supported Node.js without tsx.
 - **Decision (smallest change that works):**
