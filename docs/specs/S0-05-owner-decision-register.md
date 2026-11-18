@@ -1,5 +1,7 @@
 # S0-05 — Owner Decision Register
 
+> **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
+
 **Status:** DECIDED — the Engineering Owner's [final approval](S0-05-final-owner-approval.md) (v1.0, APPROVED WITH CHANGES) answers
 Q1 to Q10 and supersedes every earlier approval draft and addendum. The decisions are summarised in the table below. The
 "Recommended choice" text further down is the original proposal and is kept for traceability; where it differs from a
