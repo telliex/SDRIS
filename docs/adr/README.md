@@ -9,7 +9,7 @@ Implementers must not treat a `PROPOSED` ADR as approved.
 | ADR                                                       | Title                                                      | Status   | Scope         |
 | --------------------------------------------------------- | ---------------------------------------------------------- | -------- | ------------- |
 | [ADR-024](ADR-024-sprint-0-execution.md)                  | Sprint 0 Execution Blueprint                               | PROPOSED | Sprint 0      |
-| [ADR-025](ADR-025-postgresql-persistence-architecture.md) | PostgreSQL Persistence Architecture & Migration Governance | PROPOSED | S0-04 (PR #5) |
+| [ADR-025](ADR-025-postgresql-persistence-architecture.md) | PostgreSQL Persistence Architecture & Migration Governance | ACCEPTED | S0-04 (PR #5) |
 
 Approval of ADR-025 and its amendments, and of the S0-05 specification, is tracked in the
 [approval checklist](ADR-025-approval-checklist.md). It approves nothing by itself.

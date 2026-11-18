@@ -1,6 +1,6 @@
 # ADR-025: PostgreSQL Persistence Architecture & Migration Governance
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval
+- **Status:** ACCEPTED
 - **Date:** 2026-11-15
 - **Decision Owner:** SDRIS Engineering Owner
 - **Scope:** Sprint 0 — S0-04 PostgreSQL & Migration Baseline
