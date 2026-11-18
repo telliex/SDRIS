@@ -85,3 +85,57 @@ infrastructure; full command idempotency middleware ("Those belong to subsequent
   2026-11-17 audit) must be triaged before any production deployment: reachability, patched versions and compatibility,
   remediation or an explicit Owner risk disposition, and a re-run of the audit. Accepting ADR-025 is not security acceptance
   (ADR-025 section 14) and grants no exemption; any major-version upgrade needs separate Owner approval.
+
+---
+
+## A1 — Persistence dependency policy for S0-05
+
+**In force from:** the Status commit `docs(adr): accept A1` (not before it).
+
+### Owner decision
+
+**APPROVED**, decided by the Engineering Owner on 2026-11-17 and recorded in the approval checklist, section 2 (commit
+`79428db`): accept the persistence dependency policy and the context infrastructure allowlist. No change to the record's text was
+required.
+
+### Applicable rules
+
+Source: the ADR-025 file, "Proposed Amendment A1", sections A1.1 to A1.4 (the amendment text prevails).
+
+- **Rule 1.** Persistence libraries are usable only from Context Infrastructure (`drizzle-orm` and `@sdris/database` only from
+  `modules/<context>/src/infrastructure/**`, and only when allowlisted for that context).
+- **Rule 2.** Domain, Application and Public code stay independent of database infrastructure.
+- **Rule 3.** Dependencies point inward: only a module's `src/infrastructure/**` may import that same module's
+  `src/infrastructure/**`. **As written in A1; A2 widens it only from A2's own activation (see the A2 section).**
+- **Rule 4.** Global Infrastructure does not import business modules by default, with no exception mechanism.
+- **Rule 5.** Access is restricted by source path and by one centralised allowlist (`scripts/architecture/dependency-matrix.json`).
+- **Rule 6.** Cross-context restrictions are unchanged.
+- **Rule 7.** `@sdris/database` is used only through its published entrypoint.
+- **Allowlist (A1.3).** `contextInfrastructure` lists, per module, the Global Infrastructure packages and persistence libraries
+  its Context Infrastructure may use; everything not listed is denied, and a malformed entry makes the checker exit with code 2.
+- **Enforcement (A1.4).** `dependency/forbidden-external`, `dependency/direction`, `dependency/manifest`,
+  `boundary/infrastructure-inversion`, `boundary/private-import`, `boundary/package-specifier-required`.
+
+### Dependencies and activation conditions
+
+- **No dependency on another record.** A1 may be accepted independently of ADR-025's activation order, but **A2 can take effect
+  only after A1 is accepted.**
+- Activation is the Status transition below; nothing else activates it.
+
+### Status transition that activates this policy
+
+The `Status` bullet of "Proposed Amendment A1" in the ADR-025 file changes from
+`PROPOSED — Pending Engineering Owner Approval` to `ACCEPTED`, in the commit whose subject is `docs(adr): accept A1`. Per the ADR
+README convention, an individual amendment's Status change is a permitted lifecycle transition. The commit changes only that
+Status line and the mirrors of the same value (A1's "Current status" cell in the approval checklist).
+
+### Limitations and deferred obligations
+
+- A1.5: directory names under `src/` become architecture; a new context needing persistence needs a reviewed allowlist entry;
+  intra-module layering beyond Rule 3 is not addressed.
+- A1.6, not decided here: where `UnitOfWork` / `TransactionContext` finally live (governed by ADR-025 Decision 5); whether Global
+  Infrastructure may ever import a business module's public contract; audit, outbox, inbox and job table ownership; the Retrieval
+  schema; role-per-context and row-level security.
+- **Transitional fact, stated for traceability:** the architecture checker as merged already enforces Rule 3 as revised by A2
+  (composition is allowed to import same-context infrastructure). Between the Status commits of A1 and A2 the documented A1 Rule
+  3 is therefore narrower than the checker's behaviour; the A2 section states when the widening takes effect.
