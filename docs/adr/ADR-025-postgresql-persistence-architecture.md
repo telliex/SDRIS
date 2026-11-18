@@ -589,7 +589,7 @@ the manifest check each turns fixtures red.
 
 ## Proposed Amendment A2 — Dedicated Composition Entry Point
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval. It does not change the status of ADR-025 or of
+- **Status:** ACCEPTED. It does not change the status of ADR-025 or of
   Amendment A1, and nothing in it is in force until the Engineering Owner approves it in writing.
 - **Revises Amendment A1, Rule 3.** A1 Rule 3 said that only `src/infrastructure/**` may import a module's own
   `src/infrastructure/**`. A2 widens that to `src/infrastructure/**` **and** `src/composition/**`. Every other path
