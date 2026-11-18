@@ -203,3 +203,49 @@ is not rewritten.**
 - A2.7, not decided here: whether `apps/worker` becomes a composition root (it is not authorised); compiled runtime packaging
   (addressed by A4); the final home of a shared transaction contract; the Investigation aggregate itself (defined by the approved
   S0-05 specification, not by this amendment).
+
+---
+
+## A3 — Test-only entrypoints
+
+**In force from:** the Status commit `docs(adr): accept A3` (not before it).
+
+### Owner decision
+
+**APPROVED**, decided by the Engineering Owner on 2026-11-17 and recorded in the approval checklist, section 4 (commit `845800a`):
+accept the test-only entrypoint restrictions. Scope note recorded by the Owner: these restrictions do not imply runtime isolation
+or exclusion from compiled `dist` output. No change to the record's text was required.
+
+### Applicable rules
+
+Source: the ADR-025 file, "Proposed Amendment A3" (the amendment text prevails).
+
+1. The central policy `dependency-matrix.json` lists `testOnlyEntrypoints`: per package, exported subpaths that only recognised
+   test files may import (initially only `@sdris/database` `./testing`).
+2. A recognised test file is `*.test.*`, `*.spec.*` or any file under `__tests__/`; further non-test infrastructure must be listed
+   in `approvedPaths` (empty). A file merely containing the word "test" in its name or directory is not a test file.
+3. The protection covers the entrypoint **and the directory behind it**, for package-name imports, subpaths, tsconfig aliases,
+   re-exports, dynamic `import()`, `require()`, type-only imports, relative paths and self-references. Controllers, services and
+   composition roots are production code.
+4. Files inside the protected directory may use each other; no separate testing workspace package is introduced.
+
+Enforcement: `dependency/test-only-entrypoint`; a malformed policy exits with code 2.
+
+### Dependencies and activation conditions
+
+- **No dependency on another record** and no ordering constraint.
+- Read with A4's clarification: A3 restricts **who may import** a test-only entrypoint; it does not govern the physical inclusion
+  of the testing helpers in compiled `dist` output.
+
+### Status transition that activates this policy
+
+The `Status` bullet of "Proposed Amendment A3" in the ADR-025 file changes from
+`PROPOSED — Pending Engineering Owner Approval` to `ACCEPTED`, in the commit whose subject is `docs(adr): accept A3`. The commit
+changes only that Status line and the mirrors of the same value (A3's "Current status" cell in the approval checklist).
+
+### Limitations and deferred obligations
+
+- "Recognised test file" is a naming convention, so a production file named `*.test.ts` would pass.
+- **Owner's scope note:** the restrictions imply **no runtime isolation** and **no exclusion from compiled `dist` output.** The
+  `./testing` entrypoint is built into `dist/testing` and published as an entrypoint (A4 clarification); presence in `dist` is not
+  a security boundary.
