@@ -212,7 +212,7 @@ No BLOCKER and no MAJOR finding **about the code or architecture** is reported. 
 **TECHNICAL ACCEPTANCE RECOMMENDED.** OPEN-1, the release state of migration `0002`, is resolved by Owner confirmation (2026-11-17). The implementation meets Q1 to Q10, the evidence above was produced by commands that were
 actually executed on a fresh clone of the final head, the final-head Codex review reported no major issue, and the cited technical report raised no BLOCKER or MAJOR finding about the code or architecture.
 
-This is the implementation engineer's recommendation. **It is not the Engineering Owner's acceptance.**
+The technical recommendation above is the implementation engineer's. **The Engineering Owner's acceptance is the decision recorded below.**
 
 **Owner sign-off (Engineering Owner decision)**
 

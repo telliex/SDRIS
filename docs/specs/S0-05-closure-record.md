@@ -2,7 +2,7 @@
 
 > **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
 
-**Status:** CLOSED WITH CONDITIONS — Engineering Owner decision recorded 2026-11-17 on this local branch. The decision and supporting acceptance records are not yet merged to `main`.
+**Status:** CLOSED WITH CONDITIONS — Engineering Owner decision recorded 2026-11-17 (sign-off in section 7). The conditions are the four open MINOR follow-up tasks and the open OBL-SEC-1 obligation.
 
 **Milestone:** S0-05 — Investigation Aggregate Foundation  
 **Evidence:** [S0-05-architecture-acceptance.md](S0-05-architecture-acceptance.md)  
@@ -13,13 +13,13 @@
 
 ## 1. Status ladder
 
-| Level                                          | State            | Basis                                                                                                                                                                        |
-| ---------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IMPLEMENTATION MERGED                          | **YES**          | PR #6 merged 2026-11-16T08:52:03Z, merge commit `f8bb094`, final implementation `2c11d93`; `main` tree equals the PR head                                                    |
-| Merge authorised by the Engineering Owner      | **YES**          | Established fact, not re-examined by this record; the merge was performed by account `telliex`                                                                               |
-| TECHNICAL ACCEPTANCE RECOMMENDED               | **YES**          | Implementation engineer's recommendation, based on executed commands on a fresh clone and the final-head Codex review; OPEN-1 is resolved by Owner confirmation (2026-11-17) |
-| ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF | **YES, pending** | The sign-off block of the acceptance record is empty; only the Engineering Owner can complete it                                                                             |
-| CLOSURE PENDING                                | **YES, pending** | See the closure conditions in section 4                                                                                                                                      |
+| Level                                     | State   | Basis                                                                                                                                                                        |
+| ----------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IMPLEMENTATION MERGED                     | **YES** | PR #6 merged 2026-11-16T08:52:03Z, merge commit `f8bb094`, final implementation `2c11d93`; `main` tree equals the PR head                                                    |
+| Merge authorised by the Engineering Owner | **YES** | Established fact, not re-examined by this record; the merge was performed by account `telliex`                                                                               |
+| TECHNICAL ACCEPTANCE RECOMMENDED          | **YES** | Implementation engineer's recommendation, based on executed commands on a fresh clone and the final-head Codex review; OPEN-1 is resolved by Owner confirmation (2026-11-17) |
+| ARCHITECTURE ACCEPTED WITH CONDITIONS     | **YES** | The Engineering Owner decision of 2026-11-17 is recorded in section 12 of the acceptance record; the conditions are the MINOR follow-up tasks                                |
+| CLOSED WITH CONDITIONS                    | **YES** | The Engineering Owner decision of 2026-11-17 is this record's sign-off; the gates are assessed in section 4                                                                  |
 
 ## 2. What was delivered
 
@@ -70,16 +70,16 @@ published `0001` comment) are in the acceptance record, section 11.
 | G3  | OPEN-1 is closed with evidence or by a separate waiver decision that amends final approval section 4 (see 4.3). A general acceptance sign-off (G1) does not satisfy G3. **Outcome: satisfied by the Owner's environment confirmation of 2026-11-17 (decision S0-05-OPEN-1); no waiver was used** | **done** (Owner confirmation, 2026-11-17)                                                                                                                                                                                                                                                    | ☑ (S0-05-OPEN-1) |
 | G4  | The ADR-025 approval checklist reflects the merged state and current evidence                                                                                                                                                                                                                    | **content done**: refreshed in `a99699c`, OPEN-1 synchronised in the OPEN-1 resolution commit. **Not yet complete as a gate:** the documents are on the local branch `docs/s0-05-acceptance-closure` only (not pushed, no PR, not on `main`), and the Owner has not reviewed or confirmed G4 | ☐                |
 
-**Current gate assessment (2026-11-17, on this local branch):**
+**Current gate assessment (2026-11-17):**
 
-| Gate | Assessment | Evidence |
-| --- | --- | --- |
-| G1 | Satisfied locally | Engineering Owner accepted with conditions in [architecture acceptance section 12](S0-05-architecture-acceptance.md). |
-| G2 | Satisfied locally | The Owner deferred all four findings to the named tasks in [MINOR follow-up](S0-05-minor-follow-up.md). The tasks remain open and unscheduled. |
-| G3 | Satisfied | OPEN-1 was resolved by the Owner's environment confirmation; reopen if contradictory evidence appears. |
-| G4 | Satisfied | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the proposed gate; the merged state was subsequently checked. |
+| Gate | Assessment | Evidence                                                                                                                                                                                                            |
+| ---- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1   | Satisfied  | Engineering Owner accepted with conditions in [architecture acceptance section 12](S0-05-architecture-acceptance.md).                                                                                               |
+| G2   | Satisfied  | The Owner deferred all four findings to the named tasks in [MINOR follow-up](S0-05-minor-follow-up.md). The tasks remain open and unscheduled.                                                                      |
+| G3   | Satisfied  | OPEN-1 was resolved by the Owner's environment confirmation; reopen if contradictory evidence appears.                                                                                                              |
+| G4   | Satisfied  | PR #7 merged the checklist to `main` at `fec9c18`; its current-status cells agree with the individual ADR Status lines and index. The Owner agreed to the proposed gate; the merged state was subsequently checked. |
 
-The G1 and G2 records and the separate closure decision are currently on a local branch, not yet merged.
+The G1 and G2 records are in section 12 of the acceptance record and in the MINOR follow-up; the closure decision is this record's sign-off.
 
 ### 4.2 Tracked separately, not proposed as closure gates
 
