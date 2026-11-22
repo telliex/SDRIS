@@ -1,10 +1,9 @@
-# S0-05 — Architecture Acceptance Record (DRAFT)
+# S0-05 — Architecture Acceptance Record
 
 > **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
 
-**Status:** DRAFT — **ARCHITECTURE ACCEPTANCE PENDING OWNER SIGN-OFF.** This record states evidence and a technical
-recommendation. It does not accept anything. The sign-off block in section 12 is deliberately empty and may be completed
-only by the Engineering Owner.
+**Status:** ACCEPTED WITH CONDITIONS — Engineering Owner decision recorded 2026-11-17. This record states evidence and a technical
+recommendation. The Engineering Owner decision is recorded in section 12.
 
 **Milestone:** S0-05 — Investigation Aggregate Foundation  
 **Authoritative decisions:** [S0-05-final-owner-approval.md](S0-05-final-owner-approval.md) (v1.0)  
@@ -213,12 +212,12 @@ No BLOCKER and no MAJOR finding **about the code or architecture** is reported. 
 **TECHNICAL ACCEPTANCE RECOMMENDED.** OPEN-1, the release state of migration `0002`, is resolved by Owner confirmation (2026-11-17). The implementation meets Q1 to Q10, the evidence above was produced by commands that were
 actually executed on a fresh clone of the final head, the final-head Codex review reported no major issue, and the cited technical report raised no BLOCKER or MAJOR finding about the code or architecture.
 
-This is the implementation engineer's recommendation. **It is not the Engineering Owner's acceptance.**
+The technical recommendation above is the implementation engineer's. **The Engineering Owner's acceptance is the decision recorded below.**
 
-**Owner sign-off (to be completed by the Engineering Owner only)**
+**Owner sign-off (Engineering Owner decision)**
 
-Decision: ☐ ACCEPTED ☐ ACCEPTED WITH CONDITIONS ☐ NOT ACCEPTED
+Decision: ☐ ACCEPTED ☑ ACCEPTED WITH CONDITIONS ☐ NOT ACCEPTED
 
-Conditions: ______________________________________________
+Conditions: MINOR-1 to MINOR-4 are deferred to the follow-up tasks in [S0-05 MINOR follow-up](S0-05-minor-follow-up.md); Claude Code may execute them when requested, and the Engineering Owner reviews the results; scheduling remains open. OPEN-1 remains resolved on the existing Owner confirmation and must be reopened if contradictory deployment evidence appears.
 
-Approver (Engineering Owner): ______________ Date: __________ Recorded in (link or commit): ______________
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation. Date: 2026-11-17. Recorded in: this sign-off and [S0-05 MINOR follow-up](S0-05-minor-follow-up.md).

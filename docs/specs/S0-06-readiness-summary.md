@@ -1,6 +1,6 @@
 # S0-06 — Readiness Summary (DRAFT, planning only)
 
-> **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status.
+> **Status snapshot note (added 2026-11-17).** Statements in this document that ADR-025 and Amendments A1 to A4 are `PROPOSED` (or not yet accepted) describe the state when the document was written, **before** the status transitions of commits `bec7381` to `93baa76` (2026-11-17). They are dated snapshots and are not updated by status commits. **The current status of each record is its own `Status` line in `docs/adr/ADR-025-postgresql-persistence-architecture.md`** (ADR-025 also in the ADR README index). This note changes no other content and does not change this document's own status. Statements that the S0-05 Architecture Acceptance or Closure is `DRAFT` or pending describe the state before the Engineering Owner decisions of 2026-11-17 recorded in the acceptance record (section 12) and the closure record (section 7); the current status of those two records is their own `Status` line.
 
 **Status:** DRAFT. This is a readiness summary, **not an S0-06 specification and not a start of S0-06.** It reports what the
 repository actually says, what it does not say, and what has to be settled before S0-06 can be planned. **The S0-06 scope is
@@ -59,6 +59,8 @@ These are facts about what S0-05 delivered, offered as inputs for planning:
 | Any change to the allowlists (`contextInfrastructure`, `compositionRoots`) for a new persistence user or composition root | A1 and A2 require a reviewed entry                                                                                                                                                                                                                  | Only if S0-06 adds one                      |
 
 ## 5. Outstanding prerequisites
+
+> **Update (2026-11-17):** the S0-05 acceptance and closure were recorded as ACCEPTED WITH CONDITIONS and CLOSED WITH CONDITIONS (the conditions are the four open MINOR follow-up tasks and OBL-SEC-1). **Whether a closure with open conditions satisfies prerequisite 3, and whether FU-3 (the `expectedVersion` input-validation contract, which touches the service layer S0-06 will use) must be resolved first, is an Engineering Owner decision that is not yet recorded.** S0-06 remains NOT STARTED.
 
 1. The Sprint 0 Blueprint section for S0-06 (or an Owner-written S0-06 specification) committed to the repository.
 2. Recorded Owner decisions on ADR-025 and A1 to A4, each decided independently, because S0-06 persistence will be written against them (see the [decision package](../adr/ADR-025-decision-package.md) for the effective order).

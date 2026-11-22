@@ -1,5 +1,7 @@
 # S0-05 — Gap Analysis (implementation vs. proposed specification)
 
+> **Status snapshot note (added 2026-11-17).** Statements in this document that the S0-05 Architecture Acceptance or Owner acceptance is pending describe the state when the document was written. They are dated snapshots; the current status of the acceptance and closure records is their own `Status` line.
+
 **Status:** SUPERSEDED by the implementation, see the closing status below. The original analysis follows unchanged as a record of the
 gap at commit `4af1348`. It compared the code at PR #6 with
 [S0-05-investigation-aggregate-foundation.md](S0-05-investigation-aggregate-foundation.md), which is itself
