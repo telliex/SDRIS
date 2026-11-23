@@ -1,4 +1,4 @@
-# S0-06 — Contract Design Review (v0.2, DRAFT)
+# S0-06 — Contract Design Review (v0.3, DRAFT)
 
 **Status:** DRAFT review for the Engineering Owner. It recommends; it decides nothing. S0-06 implementation is **NOT STARTED**.
 
@@ -62,7 +62,7 @@ Investigation neither imports nor knows the provider; it knows only the `ActorCo
 
 Sub-decisions with the same recommendation style:
 
-- **Credential mechanism:** static synthetic tokens in a fixture table (recommended: simplest, clearly non-production) versus signed fixture assertions (more realistic, adds crypto code and possibly a dependency, which needs approval). Blocks WP-02.
+- **Credential mechanism:** **no credential strings in Phase 1** (tests obtain handles by principal key; recommended) versus signed fixture assertions (more realistic, adds crypto code and possibly a dependency, which needs approval). The v0.1 recommendation of static tokens is **withdrawn**: a committed token literal is credential-like data (CLAUDE.md section 13). When HTTP arrives (S0-07), credentials are per-process random and memory-only. Blocks WP-02.
 - **Human versus System:** two kinds in one `actorKind` field (recommended) versus two types. AI is a System actor with no extra authority.
 - **Principal mapping:** fixed table to `EntityRef { entityType: 'Actor', id: UUIDv7 }` (recommended). Whether `Actor` is an entity type owned by a context is open; the Phase 1 choice keeps it in the provider fixture and the Investigation public contract only.
 - **Isolation:** environment allowlist (`local`, `test`) checked at provider construction (recommended), plus an architecture rule that Investigation cannot import identity.
@@ -120,7 +120,7 @@ Validation is application-level in the service (the domain takes already-validat
 | Valid, `= v < 2147483647`, new link                                                                                      | `ok`, `created: true`, version `v + 1`, one audit | Steps 9 and 10 (the audit write is stage 2) |
 | Valid, stale, at maximum                                                                                                 | `concurrency_conflict`                            | Step 6                                      |
 
-Unauthenticated and permission-denied precede all rows (steps A1 and A2, stage 2). **Alternatives to Option B** (for the record): A, validate at function entry (changes today's precedence for missing cases, rejected by C7); C, validate in the HTTP layer only (a direct call would pass any value). **Recommendation: B** as directed. **Blocks:** WP-01.
+Authentication, correlation validation and authorization (A1 to A3, Stage 2) and pure role validation precede the transaction and all rows (specification 2.7). **Alternatives to Option B** (for the record): A, validate at function entry (changes today's precedence for missing cases, rejected by C7); C, validate in the HTTP layer only (a direct call would pass any value). **Recommendation: B** as directed. **Blocks:** WP-01.
 
 ## 8. Migration implications
 
@@ -161,20 +161,20 @@ Unauthenticated and permission-denied precede all rows (steps A1 and A2, stage 2
 
 ## 11. Remaining Owner decisions
 
-| Decision                                                                | Recommendation                                            | Blocks implementation |
-| ----------------------------------------------------------------------- | --------------------------------------------------------- | --------------------- |
-| D1 Which document is the specification baseline; Blueprint availability | Designate this specification after revision               | Yes                   |
-| D2 Does conditional closure satisfy the prerequisite; FU-3 first        | Yes for planning; FU-3 is WP-01                           | Yes                   |
-| D3 Actor Context option, credential mechanism, `Actor` entity type      | Option A; static tokens; Actor type kept in Investigation | Yes (WP-02+)          |
-| D4 Audited command list; reads out of scope                             | The four commands                                         | Yes (WP-04, 05)       |
-| D5 Record of audit ownership (ADR or amendment) given Decision 7        | A short ADR or amendment                                  | Yes (WP-04)           |
-| D6 Fail-closed audit in the same unit                                   | Option A section 6                                        | Yes (WP-05)           |
-| D7 Where denials and authentication failures are recorded               | Separate security log, no table in Phase 1                | Yes (WP-05)           |
-| D8 Approve the additive error codes as a public-contract change         | Approve                                                   | Yes (WP-01)           |
-| D9 Acceptance gates and Codex review cadence                            | As in the register                                        | Before WP-06 closes   |
-| Read authorisation (`getUut`, `getTestAttempt`, `getCase`)              | Out of Phase 1, recorded as a known gap                   | No                    |
-| Foreign key from `audit_record.case_id`; `recorded_at` omitted          | FK yes; omit                                              | No                    |
-| Retention period for audit data                                         | Undecided; none needed for synthetic data                 | No                    |
+| Decision                                                                | Recommendation                                                               | Blocks implementation |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
+| D1 Which document is the specification baseline; Blueprint availability | Designate this specification after revision                                  | Yes                   |
+| D2 Does conditional closure satisfy the prerequisite; FU-3 first        | Yes for planning; FU-3 is WP-01                                              | Yes                   |
+| D3 Actor Context option, credential mechanism, `Actor` entity type      | Option A; no credential strings in Phase 1; Actor type kept in Investigation | Yes (WP-02+)          |
+| D4 Audited command list; reads out of scope                             | The four commands                                                            | Yes (WP-04, 05)       |
+| D5 Record of audit ownership (ADR or amendment) given Decision 7        | A short ADR or amendment                                                     | Yes (WP-04)           |
+| D6 Fail-closed audit in the same unit                                   | Option A section 6                                                           | Yes (WP-05)           |
+| D7 Where denials and authentication failures are recorded               | Separate security log, no table in Phase 1                                   | Yes (WP-05)           |
+| D8 Approve the additive error codes as a public-contract change         | Approve                                                                      | Yes (WP-01)           |
+| D9 Acceptance gates and Codex review cadence                            | As in the register                                                           | Before WP-06 closes   |
+| Read authorisation (`getUut`, `getTestAttempt`, `getCase`)              | Out of Phase 1, recorded as a known gap                                      | No                    |
+| Foreign key from `audit_record.case_id`; `recorded_at` omitted          | FK yes; omit                                                                 | No                    |
+| Retention period for audit data                                         | Undecided; none needed for synthetic data                                    | No                    |
 
 ## 12. Revisions in v0.2 (independent architecture review)
 
@@ -190,3 +190,17 @@ Unauthenticated and permission-denied precede all rows (steps A1 and A2, stage 2
 | Work packages           | Identity checker rules in WP-02, migration inventory in WP-04, integrated verification only in WP-06; WP-03, WP-05, WP-06 blocked by WP-01; WP-02 and WP-04 independent (plan section 2)                           |
 
 The remaining Owner decisions are in the [decision register](../specs/S0-06-owner-decision-register.md) section 6 and the [remediation matrix](S0-06-review-remediation.md).
+
+## 13. Revisions in v0.3 (second remediation verification)
+
+| Area              | Change                                                                                                                                                                                                                                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reads             | Result-based, exception-based and silent-`undefined` alternatives compared; Result-based recommended; exact signatures and a caller inventory in specification 3.3. The breaking contract is the Owner's proposed direction (C11) and is **not approved**                                       |
+| Resolver          | Internal typed outcome (`valid`, `missing`, `invalid`, `expired`, `revoked`); 15-minute TTL, expiry at `now >= expiresAt`; permanent revocation; one security event per rejection (specification 2.4)                                                                                           |
+| Order             | One canonical order for every document: Authentication → Correlation Validation → Authorization → Domain Validation → Transaction (specification 2.7); the FU-3 order follows inside the transaction                                                                                            |
+| Startup           | The actual approved entrypoint is `composeInvestigation`; `main.ts` does not call it today, so earlier text implying a process exit was wrong and is corrected; paired positive and negative tests, fixtures excluded from the build, static-token recommendation withdrawn (specification 3.2) |
+| Cutover           | Operational procedure with fencing, verification and a never-back-filled completeness query; recovery never restores unaudited writes; unknown create outcomes stay UNKNOWN without proof (specification 6)                                                                                     |
+| Conflict payloads | Both existing shapes of `investigation.concurrency_conflict` documented and preserved (specification 7.4.1); v0.2 wrongly described one shape                                                                                                                                                   |
+| Token             | `AuditWriter` is internal; infrastructure rejects unknown and ended tokens only; handle-to-token provenance is **not** enforced by the infrastructure and is not claimed (specification 4.2)                                                                                                    |
+| Metadata and logs | Trusted provenance and allowlists for `source`, `correlationId`, `causationId` and `details`; the application service is the logging layer for failures before a handle exists; OBL-AUD-1 specified (specification 4.6, 4.7)                                                                    |
+| Acceptance        | AC-9 to AC-12 aligned with the real migration placement and with package boundaries, each AC has an owning package; AC-13 for authenticated reads                                                                                                                                               |
