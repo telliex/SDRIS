@@ -28,7 +28,7 @@ WP-04 (audit schema + adapter) ────────────────�
 
 Defined now, approved by the Owner with D9, and applied to **every** package as relevant; the **final integrated evidence is collected in WP-06**.
 
-1. Acceptance criteria AC-1 to AC-13 (specification 8; AC-13 only if the Owner confirms authenticated reads) are the pass conditions. **The criteria are approved by the Owner before implementation; evidence is produced during implementation in the package each criterion names and consolidated in WP-06.**
+1. Acceptance criteria AC-1 to AC-13 (specification 8) are the pass conditions. AC-6 is split into AC-6a (WP-01, concurrency without audit) and AC-6b (WP-05, concurrency with audit). **AC-13 is required in either read-policy branch**: AC-13a (authenticated reads) or AC-13b (deferred reads: explicitly constructed read-only facade and its two tests), whichever the Owner approves. **The criteria are approved by the Owner before implementation; evidence is produced during implementation in the package each criterion names and consolidated in WP-06.**
 2. Real PostgreSQL for every persistence claim; no mocked database counts as persistence evidence.
 3. Commands listed above run and their **actual** results reported (PASS/FAIL/NOT_RUN); an unexecuted test is never reported passed.
 4. No allowlist widening, no `0001`/`0002` change, no new dependency, no ADR Status change.
@@ -99,7 +99,7 @@ Defined now, approved by the Owner with D9, and applied to **every** package as 
 ### WP-06 — Integrated verification and regression
 
 - **Depends on:** WP-01 to WP-05; D9.
-- **Scope:** **integrated verification only**; each earlier package keeps its own tests. WP-06 adds the cross-cutting evidence not covered elsewhere (the compiled-runtime startup rejection and packaging check for the identity module, the compiled-runtime audit round trip), runs the full D9 requirement list and collects the evidence for AC-1 to AC-12, mutation checks of the new guards on committed code, and a fresh-clone verification. It does not move checker rules (WP-02) or migration inventory updates (WP-04). Treats FU-2 scheduling techniques as input; does not fix FU-1, FU-2 or FU-4 unless asked.
+- **Scope:** **integrated verification only**; each earlier package keeps its own tests. WP-06 adds the cross-cutting evidence not covered elsewhere (the compiled-runtime startup rejection and packaging check for the identity module, the compiled-runtime audit round trip), runs the full D9 requirement list and **consolidates the evidence for AC-1 to AC-13** (including AC-6a and AC-6b, and AC-13 for **whichever read policy the Owner approved**, AC-13a or AC-13b), mutation checks of the new guards on committed code, and a fresh-clone verification. It does not move checker rules (WP-02) or migration inventory updates (WP-04). Treats FU-2 scheduling techniques as input; does not fix FU-1, FU-2 or FU-4 unless asked.
 - **Deliverable:** an S0-06 acceptance record drafted for the Owner (same pattern as S0-05). Closure and sign-off remain the Owner's.
 - **Risks:** local-only PostgreSQL evidence until S0-10.
 - **Rollback:** tests and documentation only; revert.
