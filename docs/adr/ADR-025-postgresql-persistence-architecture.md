@@ -768,6 +768,23 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
   passed to `tsx` and set as `customConditions` wherever source resolution is wanted; the API itself is still started by `tsx`
   in development. No bundling and no publish pipeline are introduced.
 
+## Proposed Amendment A5 — Investigation-Owned Audit Persistence
+
+- **Status:** PROPOSED — Pending Engineering Owner Approval. Drafted on 2026-11-22 for S0-06. **Not approved.** It changes no other Status line, no effective-policy section and no approval-checklist row; those are updated only through the approval workflow after the Owner decides.
+- **Resolves:** one of the deferrals of Decision 7 (section 9): "Final Audit table schemas" and "concrete table ownership". It decides ownership for the **Investigation context only**.
+- **Relation to Decision 7:** Decision 7, including its "Deferred implementation" list, **stays exactly as written**. This amendment narrows the deferral for Investigation audit persistence and leaves everything else deferred. If this amendment and Decision 7 are read together, Decision 7's requirements ("No partial authoritative commit", "Audit records must correspond to committed state changes", "Unknown external outcomes must not be silently treated as failures") apply unchanged.
+- **Depends on:** ADR-025, A1 and A2 (accepted). It is independently governed and becomes effective only from its own Status commit.
+- **Rules:**
+  1. **Ownership.** The Investigation context owns its audit writer, its persistence port, its adapter and its audit table. There is no shared Audit Context, no shared audit package and no cross-context audit table.
+  2. **Schema.** The audit table lives in the PostgreSQL schema `investigation` (Decision 3 schema ownership is unchanged). Its columns, action vocabulary and per-action details are defined by the Owner-approved S0-06 specification, not by this amendment.
+  3. **Committed state changes only.** The authoritative audit record is created only for a **committed** state change, exactly one per committed state change. Duplicate no-ops, validation failures, concurrency conflicts, authentication or authorization failures and rolled-back transactions create none.
+  4. **Same transaction.** The audit record is written in the same database transaction as the state change, through the Investigation-owned transaction port (the existing `TransactionScope` over the infrastructure `UnitOfWork`), using the context's `PersistenceHandle`-based adapter. A missing or invalid transaction token is an error, never a silent fall back to a non-transactional executor. No cross-context transaction framework is introduced.
+  5. **Fail closed.** Once audit is made mandatory, a state change must not commit without its audit record; if the audit write fails, the state change fails.
+  6. **Append-only.** The table rejects update, delete and truncate at the database level. This guards against application defects, not against a privileged database role; role separation and tamper-evidence are production obligations that this amendment does not satisfy.
+  7. **Dependency policy.** No change to the allowlists of A1 or A2 is made or implied.
+- **Remains deferred (not decided here):** outbox and inbox schemas and workflow; audit for any other context and any shared audit contract; audit read APIs; retention periods; a security-event database table (a Security Log is a separate, non-authoritative contract); tamper-evidence; separate database roles and DDL restriction; worker retry policy; event publishing; full command idempotency middleware.
+- **Approval:** a decision of the Engineering Owner, recorded in the approval checklist, followed by an effective-policy section and the Status commit, per the ADR README conventions. Claude Code does not perform these steps.
+
 ## 18. Acceptance and Change Control
 
 This ADR becomes **ACCEPTED** only after explicit approval by the SDRIS Engineering Owner.
