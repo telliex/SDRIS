@@ -411,6 +411,7 @@ When the transaction may have committed but the caller saw an error or a timeout
 
 - **Stage 1 (WP-01): the existing service plus FU-3.** The service keeps its current signatures, including the reads. It has no actor, no audit and no transaction change. Only steps 5 and 8 of 7.2 are added. The change to the public contract is **additive**: two new members of the error union.
 - **Stage 2 (WP-03 and WP-05): the authenticated integration.** The `context` argument, authentication, correlation validation and authorization (A1 to A3), the `Result`-based reads (3.3) and the audit write (step 10) are added. This is a **breaking** change of the service and factory signatures. Stage 1 must be complete, reviewed and verified first, so that the two contract changes never mix.
+- **Public contract comments (WP-01).** Stage 1 also updates the comments that document the contract, so they no longer state the pre-FU-3 order: the JSDoc of `InvestigationService.linkAttempt` and the documentation of `InvestigationServiceError` in `modules/investigation/src/application/investigation-service.ts` must list the runtime `expectedVersion` validation (step 5), the exhaustion rule (step 8) and both new codes, and keep the statement that the Expected Version takes precedence over idempotency. The S0-05 specification and closure records are closed and are not edited by WP-01 unless the Owner asks. The comment change is comments only: no behaviour, no signature.
 - Neither stage is approved by this document; both need the Owner's confirmation (D8).
 
 ### 7.2 Precedence
@@ -434,7 +435,7 @@ Full order: Authentication → Correlation Validation → Authorization → Role
 
 ### 7.3 Runtime validation (step 5)
 
-Valid only if `typeof value === 'number'`, `Number.isSafeInteger(value)`, `value >= 1` and `value <= 2147483647`. No coercion. Rejected: `'3'`, `3n`, `new Number(3)`, `NaN`, `±Infinity`, `2.5`, `0`, `-1`, `2147483648`, `9007199254740993`, `undefined`, `null`, arrays, objects.
+Valid only if `typeof value === 'number'`, `Number.isSafeInteger(value)`, `value >= 1` and `value <= 2147483647`. No coercion. Rejected, each with its own test: strings (`'3'`, `''`); `3n`; booleans (`true`, `false`); `new Number(3)` and other boxed values; `NaN`; `±Infinity`; fractions (`2.5`); `0` and `-0`; negatives (`-1`); `2147483648` (`MAX + 1`); unsafe integers (`9007199254740993`); `undefined`; `null`; **an omitted property** (a JavaScript caller that sends no `expectedVersion` at all, which is `undefined` at runtime and is treated as `not_a_number` with `actualType: 'undefined'`); a `Symbol`; functions; arrays; objects.
 
 ### 7.4 Contracts
 
@@ -470,12 +471,11 @@ type InvalidExpectedVersionError = SdrisError<
       | 'symbol'
       | 'function'
       | 'null';
-    readonly actual?: number; // present only when typeof value === 'number' and the number is finite
   }
 >;
 ```
 
-`reason`, evaluated in order: `typeof !== 'number'` gives `not_a_number`; otherwise not a finite safe integer (`NaN`, infinities, fractions, unsafe integers) gives `not_a_safe_integer`; otherwise `< 1` or `> 2147483647` gives `out_of_range`. `actualType` is `typeof` with `null` reported as `'null'`. A non-numeric value is **never echoed**. `message` is fixed text and not part of the contract.
+`reason`, evaluated in order: `typeof !== 'number'` gives `not_a_number`; otherwise not a finite safe integer (`NaN`, infinities, fractions, unsafe integers) gives `not_a_safe_integer`; otherwise `< 1` or `> 2147483647` gives `out_of_range`. `actualType` is `typeof` with `null` reported as `'null'`. **The raw input is never echoed, including finite numbers** (Owner direction C12): `details` contains exactly the keys `reason`, `minimum`, `maximum` and `actualType`, and nothing derived from the value other than the `typeof` tag. `message` is fixed text and not part of the contract.
 
 #### 7.4.3 Proposed `investigation.version_exhausted`
 
@@ -492,13 +492,14 @@ type VersionExhaustedError = SdrisError<
 
 Stage 1 tests run against the existing signatures; races run on real PostgreSQL with the existing row-lock and `pg_stat_activity` technique. FU-2 (scheduling) is an input, not a dependency.
 
-1. **Precedence (unit, then PostgreSQL):** an invalid `expectedVersion` with each of an unknown role, unknown case, unknown attempt and cross-UUT pair returns the earlier error (`invalid_link_role`, `case_not_found`, `attempt_not_found`, `uut_mismatch`); an invalid value on a valid request returns `invalid_expected_version`; a valid stale value returns `concurrency_conflict` even when the identical link exists.
-2. **Malformed values:** every value of 7.3 returns the exact `reason` and `actualType` of 7.4.2; non-numeric values are not echoed; nothing is written and no repository write call is made.
-3. **Maximum version:** with a case at 2147483647 (test-only SQL): a new link returns `version_exhausted` (details exactly as 7.4.3); the matching duplicate returns `ok`, `created: false`, version unchanged, no write; a stale value returns `concurrency_conflict` (service shape, with `actualVersion`); an `expectedVersion` of 2147483648 returns `invalid_expected_version`; the column definition is unchanged and PostgreSQL error 22003 is never raised.
+1. **Precedence (unit, then PostgreSQL):** an invalid `expectedVersion` with each of an unknown role, unknown case, unknown attempt and cross-UUT pair returns the earlier error (`invalid_link_role`, `case_not_found`, `attempt_not_found`, `uut_mismatch`); an invalid value on a valid request returns `invalid_expected_version`; the same holds for a JavaScript call that **omits** `expectedVersion`; a valid stale value returns `concurrency_conflict` even when the identical link exists.
+2. **Malformed values:** every value of 7.3 returns the exact `reason` and `actualType` of 7.4.2; the error `details` have **exactly** the keys `reason`, `minimum`, `maximum` and `actualType` (a test fails if any other key, such as a copy of the value, appears; this covers finite numbers such as `2.5`, `0`, `-1` and `2147483648`); every value class of 7.3 is exercised, including booleans, boxed numbers and the omitted property; nothing is written and no repository write call is made.
+3. **Maximum version:** with a case at 2147483647 (test-only SQL): a new link returns `version_exhausted` (details exactly as 7.4.3); the matching duplicate (same role) returns `ok`, `created: false`, version unchanged, no write; **a link of the same attempt with a different role** is a new link and returns `version_exhausted` (the role does not change the rule); a stale value returns `concurrency_conflict` (service shape, with `actualVersion`); an `expectedVersion` of 2147483648 returns `invalid_expected_version`; the column definition is unchanged and PostgreSQL error 22003 is never raised.
 4. **Duplicate no-op:** at a normal version, a matching duplicate returns `created: false`, writes no row and does not change the version.
 5. **Race, repository shape:** two concurrent new links with the same `expectedVersion`, with the loser forced past step 6 by the row-lock technique: exactly one `ok` and one link row; the loser's `concurrency_conflict` has `details` with `expectedVersion` and **without** `actualVersion`.
 6. **Sequential stale, service shape:** the loser arriving after the winner committed gets `concurrency_conflict` **with** `actualVersion`.
 7. **Race at the boundary:** two concurrent new links at `expectedVersion = 2147483646`: one reaches 2147483647 and the other conflicts; a following new link at `expectedVersion = 2147483647` returns `version_exhausted`.
+   7a. **Sequential boundary:** from a case at `2147483646`, one new link with `expectedVersion = 2147483646` returns `ok`, `created: true`, version `2147483647`; an immediately following **different-role** link with `expectedVersion = 2147483647` returns `version_exhausted`; a repeat of the first request returns `concurrency_conflict` (service shape), because the version moved.
 8. **Compatibility:** the type-surface test passes with the widened union; the compiled-runtime test still passes.
 
 ### 7.6 Public API compatibility inventory (by search at `ae7dc51`)
