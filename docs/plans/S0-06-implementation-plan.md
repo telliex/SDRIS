@@ -3,13 +3,13 @@
 **Status:** DRAFT plan. **Do not execute.** S0-06 is NOT STARTED and no work package may start until the gate in section 1 is open. Everything depends on the Owner decisions D1 to D9 in the [decision register](../specs/S0-06-owner-decision-register.md) and may change with them. Revised after the independent architecture review; see the [remediation matrix](../reviews/S0-06-review-remediation.md).
 
 - **Date:** 2026-11-22. **Reviewed baseline (pinned):** `main` at `ae7dc51b94b589c33ae8a1218b4d72d036e9fa21`.
-- **Integration base rule (every package):** record the then-current `origin/main` SHA; run `git merge-base --is-ancestor ae7dc51 origin/main`; diff the files this plan names between `ae7dc51` and the base; report differences to the Owner before work starts. Never assume the baseline is still the latest commit.
+- **Integration base rule (every package):** the package is cut from the **integration SHA the Owner approves in the written authorization**, not from "the current main". Before the branch is cut: `git merge-base --is-ancestor ae7dc51 <approved SHA>`; the approved SHA must be an ancestor of or equal to the `origin/main` tip; diff the files this plan names between `ae7dc51` and the approved SHA; report any difference, and any movement of `origin/main` since the approval, to the Owner for re-approval or written confirmation. Never assume the reviewed baseline is the integration base.
 - **Related:** [specification v0.4](../specs/S0-06-authentication-audit-foundation.md), [contract review](../reviews/S0-06-contract-design-review.md).
 - **Commands** (CLAUDE.md section 7; confirm in `package.json` first): `pnpm check:structure`, `lint`, `format:check`, `typecheck`, `test`, `build`, `check:architecture`, `db:test` (Docker PostgreSQL via `pnpm db:up`), `test:runtime`.
 
 ## 1. Start gate
 
-Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED for WP-04 and WP-05, a clean branch from current `main` with its SHA recorded. **Gate today: CLOSED.**
+Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate today: CLOSED.**
 
 ## 2. Dependencies and parallelism
 

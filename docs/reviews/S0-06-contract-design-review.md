@@ -161,20 +161,20 @@ Authentication, correlation validation and authorization (A1 to A3, Stage 2) and
 
 ## 11. Remaining Owner decisions
 
-| Decision                                                                | Recommendation                                                               | Blocks implementation |
-| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------- |
-| D1 Which document is the specification baseline; Blueprint availability | Designate this specification after revision                                  | Yes                   |
-| D2 Does conditional closure satisfy the prerequisite; FU-3 first        | Yes for planning; FU-3 is WP-01                                              | Yes                   |
-| D3 Actor Context option, credential mechanism, `Actor` entity type      | Option A; no credential strings in Phase 1; Actor type kept in Investigation | Yes (WP-02+)          |
-| D4 Audited command list; reads out of scope                             | The four commands                                                            | Yes (WP-04, 05)       |
-| D5 Record of audit ownership (ADR or amendment) given Decision 7        | A short ADR or amendment                                                     | Yes (WP-04)           |
-| D6 Fail-closed audit in the same unit                                   | Option A section 6                                                           | Yes (WP-05)           |
-| D7 Where denials and authentication failures are recorded               | Separate security log, no table in Phase 1                                   | Yes (WP-05)           |
-| D8 Approve the additive error codes as a public-contract change         | Approve                                                                      | Yes (WP-01)           |
-| D9 Acceptance gates and Codex review cadence                            | As in the register                                                           | Before WP-06 closes   |
-| Read authorisation (`getUut`, `getTestAttempt`, `getCase`)              | Out of Phase 1, recorded as a known gap                                      | No                    |
-| Foreign key from `audit_record.case_id`; `recorded_at` omitted          | FK yes; omit                                                                 | No                    |
-| Retention period for audit data                                         | Undecided; none needed for synthetic data                                    | No                    |
+| Decision                                                                | Recommendation                                                                                                                 | Blocks implementation                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| D1 Which document is the specification baseline; Blueprint availability | Designate this specification after revision                                                                                    | Yes                                                               |
+| D2 Does conditional closure satisfy the prerequisite; FU-3 first        | Yes for planning; FU-3 is WP-01                                                                                                | Yes                                                               |
+| D3 Actor Context option, credential mechanism, `Actor` entity type      | Option A; no credential strings in Phase 1; Actor type kept in Investigation                                                   | Yes (WP-02+)                                                      |
+| D4 Audited command list; reads out of scope                             | The four commands                                                                                                              | Yes (WP-04, 05)                                                   |
+| D5 Record of audit ownership given Decision 7                           | Amendment A5 (PROPOSED), accepted through the ADR workflow; no alternative                                                     | Yes (WP-04, WP-05)                                                |
+| D6 Fail-closed audit in the same unit                                   | Option A section 6                                                                                                             | Yes (WP-05)                                                       |
+| D7 Where denials and authentication failures are recorded               | Separate security log, no table in Phase 1                                                                                     | Yes (WP-05)                                                       |
+| D8 Approve the additive error codes as a public-contract change         | Approve                                                                                                                        | Yes (WP-01)                                                       |
+| D9 Acceptance gates and Codex review cadence                            | As in the register                                                                                                             | Yes (approved before any package; evidence consolidated in WP-06) |
+| Read authorisation (`getUut`, `getTestAttempt`, `getCase`)              | Authenticated reads are the proposed Stage 2 direction (C11), pending approval; exposure rule if deferred in specification 3.3 | Yes (WP-03)                                                       |
+| Foreign key from `audit_record.case_id`; `recorded_at` omitted          | FK yes; omit                                                                                                                   | No                                                                |
+| Retention period for audit data                                         | Undecided; none needed for synthetic data                                                                                      | No                                                                |
 
 ## 12. Revisions in v0.2 (independent architecture review)
 
