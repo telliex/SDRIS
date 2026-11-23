@@ -1,89 +1,110 @@
-# S0-06 — Implementation Plan (PLANNING ONLY, DRAFT)
+# S0-06 — Implementation Plan (PLANNING ONLY, v0.2 DRAFT)
 
-**Status:** DRAFT plan. **Do not execute.** S0-06 is NOT STARTED and no work package may start until the gate in section 1 is open. Everything here depends on the Owner decisions D1 to D9 in the [decision register](../specs/S0-06-owner-decision-register.md) and may change with them.
+**Status:** DRAFT plan. **Do not execute.** S0-06 is NOT STARTED and no work package may start until the gate in section 1 is open. Everything depends on the Owner decisions D1 to D9 in the [decision register](../specs/S0-06-owner-decision-register.md) and may change with them. Revised after the independent architecture review; see the [remediation matrix](../reviews/S0-06-review-remediation.md).
 
-- **Date:** 2026-11-22. **Baseline:** `main` at `ae7dc51`. Related: [specification](../specs/S0-06-authentication-audit-foundation.md), [contract review](../reviews/S0-06-contract-design-review.md).
-- **Verification commands** (CLAUDE.md section 7; confirm in `package.json` before use): `pnpm check:structure`, `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm check:architecture`, `pnpm db:test` (needs Docker PostgreSQL via `pnpm db:up`).
+- **Date:** 2026-11-22. **Reviewed baseline (pinned):** `main` at `ae7dc51b94b589c33ae8a1218b4d72d036e9fa21`.
+- **Integration base rule (every package):** record the then-current `origin/main` SHA; run `git merge-base --is-ancestor ae7dc51 origin/main`; diff the files this plan names between `ae7dc51` and the base; report differences to the Owner before work starts. Never assume the baseline is still the latest commit.
+- **Related:** [specification v0.3](../specs/S0-06-authentication-audit-foundation.md), [contract review](../reviews/S0-06-contract-design-review.md).
+- **Commands** (CLAUDE.md section 7; confirm in `package.json` first): `pnpm check:structure`, `lint`, `format:check`, `typecheck`, `test`, `build`, `check:architecture`, `db:test` (Docker PostgreSQL via `pnpm db:up`), `test:runtime`.
 
 ## 1. Start gate
 
-Open only when the register section 8 conditions hold: D1 to D8 recorded by the Owner, written authorisation to implement (S0-06 or a named package), the D5 record, a clean branch from current `main`. **Gate today: CLOSED.**
+Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED for WP-04 and WP-05, a clean branch from current `main` with its SHA recorded. **Gate today: CLOSED.**
 
-## 2. Work packages
+## 2. Dependencies and parallelism
 
 ```text
-WP-01 ─────────────┐
-WP-02 ─> WP-03 ────┼─> WP-05 ─> WP-06
-WP-04 ─────────────┘
+WP-01 (FU-3, stage 1) ─────────────┬──────────> WP-03 ─┐
+WP-02 (identity)  ─────────────────┘ (WP-03 needs both) ├─> WP-05 ─> WP-06
+WP-04 (audit schema + adapter) ──────────────────────────┘
 ```
 
-WP-01, WP-02 and WP-04 are independent of each other and may be separate PRs in any order. Each package is its own branch and PR; the Owner reviews and authorises the next (CLAUDE.md section 14). One Codex review of the final head per package is the proposed default (D9).
+- **May proceed independently of WP-01 (and of each other):** WP-02 and WP-04 (WP-04 additionally needs A5 accepted).
+- **Blocked by WP-01:** WP-03, WP-05, WP-06. WP-03 changes `linkAttempt`'s signature, so it must start from the **completed, reviewed and verified** FU-3 contract (specification 7, stage 1). WP-05 adds the audit call to the same command. This keeps stage 1 (additive) and stage 2 (breaking) from mixing.
+- **Blocked by WP-02:** WP-03. **Blocked by WP-03 and WP-04:** WP-05.
+- Each package is its own branch and PR; the Owner reviews and authorises the next (CLAUDE.md section 14). One Codex review of the final head per package is the proposed default (D9).
 
-### WP-01 — FU-3 runtime validation and version exhaustion
+## 3. D9 verification requirements (fixed before implementation)
 
-- **Depends on:** D2, D8.
-- **Scope:** validation of `expectedVersion` at step 5; `investigation.invalid_expected_version` and `investigation.version_exhausted`; the exhaustion check at step 8; public-contract export of the new codes. No audit, no actor, no migration.
-- **Files likely:** `modules/investigation/src/application/investigation-service.ts` (+ spec), `modules/investigation/src/public/index.ts`, `apps/api/src/composition/investigation-links.integration.test.ts`, the S0-05 spec/FU-3 record (status note only if the Owner asks).
-- **Tests:** the full matrix of review section 7 (unit); version exhaustion on real PostgreSQL with a case seeded by test-only SQL; regression of all S0-05 link tests.
-- **Risks:** public error union change; a test that relies on current non-validation; precedence regressions (mitigation: the matrix rows run before the change as characterisation tests where they already hold).
-- **Rollback:** revert the commits; no schema or data change exists.
-- **Commits:** (1) `test(investigation): characterise linkAttempt error precedence` (2) `feat(investigation): validate expectedVersion at the comparison position` (3) `feat(investigation): fail explicitly at version exhaustion` (4) `docs(investigation): record the FU-3 outcome` (only if the Owner asks).
+Defined now, approved by the Owner with D9, and applied to **every** package as relevant; the **final integrated evidence is collected in WP-06**.
 
-### WP-02 — Synthetic Identity and trusted Actor Context
+1. Acceptance criteria AC-1 to AC-12 (specification 8) are the pass conditions.
+2. Real PostgreSQL for every persistence claim; no mocked database counts as persistence evidence.
+3. Commands listed above run and their **actual** results reported (PASS/FAIL/NOT_RUN); an unexecuted test is never reported passed.
+4. No allowlist widening, no `0001`/`0002` change, no new dependency, no ADR Status change.
+5. Mutation or negative checks for each new guard on committed code (the S0-05 technique).
+6. A fresh-clone verification at the end of WP-06.
+7. All results are local until S0-10 provides CI.
 
-- **Depends on:** D1, D3.
-- **Scope:** Actor Context contract in the Investigation public surface; the synthetic provider and issuer registry in the application layer; environment refusal; synthetic fixture principals. No Investigation command changes yet.
-- **Files likely:** `apps/api/src/identity/**` (new), `modules/investigation/src/public/index.ts`, `scripts/architecture/dependency-matrix.json` and checker rules **only if** the Owner approves the new import rules, fixtures under `tests/architecture` for them.
-- **Tests:** issuer unit tests (valid, expired, malformed, unknown credential, forged object, wrong environment); architecture fixtures (Investigation cannot import identity; only composition roots import the issuer).
-- **Risks:** a new composition location needs a reviewed allowlist entry (A1/A2); signed assertions would need a dependency (not proposed).
-- **Rollback:** revert; nothing else depends on it until WP-03.
-- **Commits:** `feat(api): add the synthetic identity provider`, `feat(investigation): add the actor context contract`, `test(architecture): cover identity import rules`.
+## 4. Work packages
 
-### WP-03 — Authorization boundary
+### WP-01 — FU-3 runtime validation and version exhaustion (stage 1)
 
-- **Depends on:** WP-02, D3.
-- **Scope:** authenticate and authorise at step 0 for the four write commands; the permission set; `investigation.unauthenticated` and `investigation.permission_denied`; the new first argument or scoped binding chosen in D3. Updates call sites and existing tests mechanically.
-- **Files likely:** `investigation-service.ts` (+ spec), `composition/index.ts`, `apps/api/src/composition/investigation.composition.ts`, the S0-05 integration tests (actor argument only).
-- **Tests:** direct service calls with and without each permission; unauthenticated, forged and expired contexts; no row written on denial; read behaviour unchanged.
-- **Risks:** a large mechanical diff in existing tests that hides regressions (mitigation: a separate preparatory commit that only adds a default test actor).
-- **Rollback:** revert; contracts return to the S0-05 shape.
-- **Commits:** `refactor(investigation): thread the actor context through write commands` (no behaviour), `feat(investigation): enforce write permissions in the application service`, `test(investigation): cover denial and unauthenticated paths`.
+- **Depends on:** D1, D2, D8. **Independent of:** WP-02, WP-04.
+- **Scope:** specification 7 stage 1 only: step 5 (`invalid_expected_version`), step 8 (`version_exhausted`), the two error types in the public contract, no actor, no audit, no migration, **no signature change**.
+- **Files likely:** `modules/investigation/src/application/investigation-service.ts` and `.spec.ts`, `modules/investigation/src/public/index.ts`, `apps/api/src/composition/investigation-links.integration.test.ts`; `tests/architecture/type-surface.test.mjs` re-run for the widened union.
+- **Tests:** characterisation of existing precedence first; every value of specification 7.3 with the deterministic `reason`/`actualType`; precedence rows (case/attempt/same-UUT before step 5, step 6 after); version exhaustion on real PostgreSQL with a case seeded at 2147483647 by test-only SQL; duplicate and stale at the maximum; compiled-runtime check that the build still passes.
+- **Exit evidence:** the compatibility inventory (specification 7.5) re-verified against the code at the integration base; Owner review of the contract before WP-03 starts.
+- **Risks:** widened exported union; a hidden dependency on non-validation (none found in the repository).
+- **Rollback:** revert the commits; no schema or data change exists, so rollback is complete.
+- **Commits:** (1) `test(investigation): characterise linkAttempt error precedence` (2) `feat(investigation): validate expectedVersion at the comparison position` (3) `feat(investigation): fail explicitly at version exhaustion`.
+
+### WP-02 — Synthetic identity and trusted actor handle
+
+- **Depends on:** D1, D3. **Independent of:** WP-01, WP-04.
+- **Scope:** `ActorHandle` and `ActorResolver` contracts in the Investigation public surface; the issuer, registry, trusted clock, expiry, revocation and fixture principals under `apps/api/src/composition/identity/**`; the `TrustedEnvironment` reader and fail-closed startup rejection; **the identity checker rules and their fixtures (assigned here, not to WP-06)**: Investigation may not import the identity module; nothing outside the composition roots and recognised test files may import the issuer or fixtures. No Investigation command changes.
+- **Files likely:** `apps/api/src/composition/identity/**` (new), `modules/investigation/src/public/index.ts`, `scripts/architecture/**` and `tests/architecture/fixtures/**` for the new restriction rules; **no change to `dependency-matrix.json` allowlists** (a need for one stops the package and goes to the Owner as a separate proposal).
+- **Tests:** issuer unit tests (valid, expired, revoked, foreign issuer, forged plain object, claim immutability, deep-frozen copies); environment matrix (unset, empty, `production`, `prod`, `Test`, conflicting variables); checker fixtures valid and invalid; the compiled-runtime startup rejection test is added in WP-06 but its harness may be prepared here.
+- **Risks:** a new composition location; fixtures shipping in `dist` (decide per D3).
+- **Rollback:** revert; nothing depends on it until WP-03.
+- **Commits:** `feat(investigation): add the actor handle and resolver contracts`, `feat(api): add the synthetic identity issuer`, `feat(api): refuse the synthetic issuer outside local and test`, `test(architecture): enforce the identity import rules`.
+
+### WP-03 — Authorization boundary (stage 2, part 1)
+
+- **Depends on:** WP-01 (completed and reviewed), WP-02, D3.
+- **Scope:** the `context` first argument on the four write commands (and on the reads if D3 says so); authentication (A1) and authorization (A2) **before `transactions.run`**; `unauthenticated`, `permission_denied`, `invalid_request_context`; the Security Log port and its contract; `actorResolver` as a required composition option.
+- **Files likely:** `investigation-service.ts` and `.spec.ts`, `composition/index.ts`, `apps/api/src/composition/investigation.composition.ts`, the S0-05 tests (context argument only), the compiled-runtime child script.
+- **Tests:** direct service calls with and without each permission; no transaction opened on rejection (asserted with a counting `TransactionScope`); Security Log events contain no credential, handle or payload values; sink failure does not change the result; a JavaScript caller with no or forged context.
+- **Risks:** a large mechanical diff hiding regressions (mitigation: a first commit that only threads a default test context with no behaviour change); this is the **breaking** contract change and needs the Owner's approval.
+- **Rollback:** revert; contracts return to the stage 1 shape. No schema exists yet.
+- **Commits:** `refactor(investigation): thread the request context through the commands` (no behaviour), `feat(investigation): authenticate and authorise before the transaction`, `feat(investigation): add the security log port`, `test(investigation): cover rejection paths`.
 
 ### WP-04 — Investigation audit schema and persistence
 
-- **Depends on:** D4, D5 (and the D5 record).
-- **Scope:** migration `0003`; Drizzle table; `AuditWriter` port; Drizzle adapter; append-only triggers; public action names. Not yet wired into commands.
-- **Files likely:** `infrastructure/database/migrations/0003_…sql`, `modules/investigation/src/infrastructure/persistence/{schema,audit-adapter}.ts`, `application/ports/audit-writer.ts`, `migrations.integration.test.ts` and `migrations.spec.ts`, runtime child test.
-- **Tests:** migration on clean and `0002` databases; `0001`/`0002` checksums unchanged; check constraints; update/delete rejection; adapter writes with a transaction and rolls back with it; the differential and invariant migration tests.
-- **Risks:** table lists in existing tests; schema choices hard to change after merge.
-- **Rollback:** an unreleased migration is reverted in git before it is applied anywhere shared; once applied, a forward migration is required (ADR-025 section 4 was searched for a down-migration policy and none was found; the Owner should confirm).
-- **Commits:** `feat(database): add the investigation audit record migration`, `feat(investigation): add the audit writer port and adapter`, `test(investigation): cover audit persistence and immutability`.
+- **Depends on:** D4, D5 (**A5 ACCEPTED**), D6. **Independent of:** WP-01 to WP-03.
+- **Scope:** migration `0003`; Drizzle table; `AuditWriter` port; the adapter built on `PersistenceHandle` + `executorOf(handle, tx)` that **throws when the token is missing**; per-action check constraints (details allowlist, `case_id` rule, timestamps without defaults); foreign key to `investigation_case`; row triggers for update and delete and a statement trigger for truncate; the startup readiness query. **Not wired into any command.** **Migration inventory updates are assigned here:** the lists in `migrations.integration.test.ts`, `migrations.spec.ts` and the compiled-runtime child that enumerate tables or migrations.
+- **Files likely:** `infrastructure/database/migrations/0003_create_investigation_audit_record.sql`, `modules/investigation/src/application/ports/audit-writer.ts`, `modules/investigation/src/infrastructure/persistence/{schema.ts,drizzle-audit-writer.ts}`, the test files above.
+- **Tests (real PostgreSQL):** migration on a clean database and on one at `0002`; `0001`/`0002` checksums unchanged; each check constraint accepts the four valid shapes and rejects out-of-allowlist `details`, a wrong subject type, a `case_id` mismatch and `versionAfter ≠ versionBefore + 1`; update, delete and truncate rejected; the adapter with no token throws `AuditTransactionRequiredError`, with an ended token throws `TransactionContextError`, with a rolled-back unit leaves no row; the differential and invariant migration tests re-run.
+- **Risks:** schema choices are hard to change after merge (forward repair only); table lists in existing tests.
+- **Rollback:** before the migration is applied anywhere shared, revert in git. Once applied, **forward repair only** (`0004` or later); `0003` is never edited. Because nothing writes audit rows yet, the table stays inert and harmless.
+- **Commits:** `feat(database): add the investigation audit record migration`, `feat(investigation): add the audit writer port and persistence adapter`, `test(database): update the migration inventory for 0003`, `test(investigation): cover audit persistence, immutability and token requirements`.
 
-### WP-05 — Atomic audit integration
+### WP-05 — Atomic audit integration and activation
 
-- **Depends on:** WP-01, WP-03, WP-04, D6, D7.
-- **Scope:** call the audit writer inside `transactional()` for each committed change; one clock read per command; correlation and actor propagated; no audit for no-ops, errors or rollbacks; the denial log decision from D7.
-- **Files likely:** `investigation-service.ts` (+ spec), `composition/index.ts`, integration tests.
-- **Tests:** section 5 table row by row; failure injection (audit port throws; DB check violation); concurrent link race with one audit row; exhaustion and duplicate at maximum version write none.
-- **Risks:** forgotten audit call in a command (mitigation: AC-3 per command); audit failure turning into availability loss (intended; D6).
-- **Rollback:** revert the wiring commit; WP-04 stays inert.
-- **Commits:** `feat(investigation): record audit entries atomically with state changes`, `test(investigation): prove audit atomicity and rollback`, `test(investigation): audit under concurrent linking`.
+- **Depends on:** WP-01, WP-03, WP-04; D6, D7.
+- **Scope:** audit entry assembly and validation before the first write; the audit call inside `transactional()` only for created state changes; one clock reading per command; **the mandatory-audit activation point**: `createInvestigationService` requires the audit writer, with no flag; the startup readiness check; step 10 of the precedence.
+- **Files likely:** `investigation-service.ts` and `.spec.ts`, `composition/index.ts`, the integration tests.
+- **Tests:** the table in specification 5 row by row; failure injection (audit port throws; database check violation; missing token); the concurrent-link race with one audit row; duplicate and exhausted links write none; per-operation persisted-timestamp equality; startup refuses a database without the audit shape; the service cannot be built without an audit writer.
+- **Activation and recovery (specification 6):** the commit that makes audit required is **the activation point** and is identified in the PR. After it, mutations fail closed if audit is unavailable. **Recovery is a working audit-capable build or held writes. Reverting to a build without mandatory audit is not a recovery path** and is never performed silently in an environment that has accepted audited writes; a faulty applied schema is repaired by a forward migration. A lost commit acknowledgment is an unknown outcome: the service throws, `linkAttempt` is safe to replay (stale `expectedVersion` yields `concurrency_conflict`), creates are reconciled by `correlation_id` before any retry.
+- **Risks:** a forgotten audit call (AC-3 per command); availability loss from audit failure (intended; D6).
+- **Rollback:** development-time only: revert the activation commit **before** any shared environment adopts it. After adoption, see Recovery. WP-04's table is unaffected either way.
+- **Commits:** `feat(investigation): validate audit entries against the investigation vocabulary`, `feat(investigation): record audit entries atomically with state changes` (**activation point**), `feat(investigation): verify the audit schema at startup`, `test(investigation): prove audit atomicity, rollback and exclusions`, `test(investigation): audit under concurrent linking`.
 
-### WP-06 — Integration tests, architecture checks and regression
+### WP-06 — Integrated verification and regression
 
-- **Depends on:** WP-01 to WP-05, D9.
-- **Scope:** the cross-cutting acceptance evidence AC-1 to AC-11 not already covered; architecture checker additions confirmed by the Owner; compiled-runtime smoke coverage for the new modules; the acceptance record for S0-06 as a draft for the Owner. Considers FU-2 scheduling techniques as input; does not fix FU-1, FU-2 or FU-4 unless asked.
-- **Tests:** full suite, `pnpm db:test`, mutation checks of the new guards on committed code, fresh-clone verification as for S0-05.
+- **Depends on:** WP-01 to WP-05; D9.
+- **Scope:** **integrated verification only**; each earlier package keeps its own tests. WP-06 adds the cross-cutting evidence not covered elsewhere (the compiled-runtime startup rejection and packaging check for the identity module, the compiled-runtime audit round trip), runs the full D9 requirement list and collects the evidence for AC-1 to AC-12, mutation checks of the new guards on committed code, and a fresh-clone verification. It does not move checker rules (WP-02) or migration inventory updates (WP-04). Treats FU-2 scheduling techniques as input; does not fix FU-1, FU-2 or FU-4 unless asked.
+- **Deliverable:** an S0-06 acceptance record drafted for the Owner (same pattern as S0-05). Closure and sign-off remain the Owner's.
 - **Risks:** local-only PostgreSQL evidence until S0-10.
-- **Rollback:** test and documentation only; revert.
-- **Commits:** `test(investigation): add the S0-06 acceptance suite`, `test(architecture): lock the identity and audit boundaries`, `docs(s0-06): add the acceptance record draft`.
+- **Rollback:** tests and documentation only; revert.
+- **Commits:** `test(runtime): reject the synthetic issuer in the compiled api`, `test(investigation): add the integrated S0-06 acceptance suite`, `docs(s0-06): add the acceptance record draft`.
 
-## 3. Cross-cutting rules
+## 5. Cross-cutting rules
 
-- Docs-first: each package updates the specification status line only through an Owner-approved change.
-- No ADR Status change, no dependency addition, no loosening of the architecture checker, no `0001`/`0002` change in any package.
+- No ADR Status change, no allowlist widening, no new dependency, no `0001`/`0002` change in any package.
+- Specification status lines change only through an Owner-approved change.
 - Each package ends with the CLAUDE.md implementation report and stops for review.
 
-## 4. Not planned
+## 6. Not planned
 
-Outbox/inbox, audit read APIs, other contexts, HTTP endpoints, real authentication, retention automation, S0-07 and later work.
+Outbox/inbox, audit read APIs, other contexts, HTTP endpoints, real authentication, retention automation, a security-event table, tamper-evidence, worker actors, S0-07 and later work.
