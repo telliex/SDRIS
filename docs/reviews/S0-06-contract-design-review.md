@@ -1,8 +1,8 @@
-# S0-06 — Contract Design Review (DRAFT)
+# S0-06 — Contract Design Review (v0.2, DRAFT)
 
 **Status:** DRAFT review for the Engineering Owner. It recommends; it decides nothing. S0-06 implementation is **NOT STARTED**.
 
-- **Date:** 2026-11-22. **Baseline:** `main` at `ae7dc51` (verified current; no drift from the review reference).
+- **Date:** 2026-11-22. **Reviewed baseline (pinned):** `main` at `ae7dc51b94b589c33ae8a1218b4d72d036e9fa21`, reviewed at branch HEAD `24b73c8`. It was current when v0.1 was written and is **not assumed current later**: the integration base is re-verified before any package starts (specification, front matter). v0.2 revises this review after the independent architecture review; section 12 lists the revisions.
 - **Convention note:** the repository has no `docs/reviews/` directory and no earlier review-document convention (checked); this file creates the directory. Related: [decision register](../specs/S0-06-owner-decision-register.md), [specification](../specs/S0-06-authentication-audit-foundation.md), [plan](../plans/S0-06-implementation-plan.md).
 
 ## 1. Verified current-state architecture
@@ -58,7 +58,7 @@ Investigation neither imports nor knows the provider; it knows only the `ActorCo
 | C. Ambient `AsyncLocalStorage`                                               | Smallest diff; hidden dependency, easy to lose across worker or scheduled boundaries, harder to prove in tests; contradicts the explicit style of the contracts |
 | D. Trust a plain `actorId` string                                            | Cheap; no authentication at all; forgeable by any caller. Rejected                                                                                              |
 
-**Recommendation: A** with an issuer-registered context (the WeakMap pattern of `unit-of-work.ts` is the in-repository precedent). **Evidence:** CLAUDE.md section 5 (explicit, readable code) and the existing explicit `tx` and `expectedVersion` parameters. **Blocks implementation:** yes (WP-02, WP-03, WP-05).
+**Recommendation: A, with an opaque, member-less, issuer-registered `ActorHandle` instead of a context object that carries claims** (v0.2 change). The WeakMap pattern of `persistence-handle.ts` and `unit-of-work.ts` is the in-repository precedent; claims stay issuer-private and the service receives a fresh deep-frozen copy from an injected `ActorResolver` port. Authentication and authorization run before the transaction is created. **Evidence:** CLAUDE.md section 5 (explicit, readable code) and the existing explicit `tx` and `expectedVersion` parameters. **Blocks implementation:** yes (WP-02, WP-03, WP-05).
 
 Sub-decisions with the same recommendation style:
 
@@ -88,45 +88,45 @@ Sub-decisions with the same recommendation style:
 | C. Per-command audit tables                                                               | Strong typing; four tables for four commands, more migrations                                               |
 | D. Database triggers producing audit rows                                                 | Cannot know the actor or correlation id without session variables; hides behaviour. Rejected                |
 
-**Recommendation: A.** Include `case_id` (nullable) for per-case history; whether it has a foreign key to `investigation_case` is open (a foreign key forbids later case deletion, which is not planned; recommendation: add it). `recordedAt` stays null in Phase 1. **Evidence:** `AuditMetadata` shape; existing flat tables in `0002`. **Blocks:** yes (WP-04).
+**Recommendation: A.** `case_id` is non-null exactly when the subject is an `InvestigationCase` (`case_opened`, `attempt_linked`) and equals `subject_id`; null for `uut_registered` and `test_attempt_registered`. Foreign key to `investigation_case(id)` with `NO ACTION` (v0.2 proposal; was open); deleting a case that has audit history must be rejected, never cascaded. `details` is a closed per-action allowlist enforced by the Investigation validator and by database checks; `recorded_at` is omitted in Phase 1. **Evidence:** `AuditMetadata` shape; existing flat tables in `0002`. **Blocks:** yes (WP-04).
 
-Append-only: reuse the existing trigger approach for update, and add a delete-rejecting trigger (the existing trigger function rejects updates only; the new migration needs its own).
+Append-only: row triggers for update and delete plus a statement trigger for truncate (the existing `reject_update` rejects updates only). The triggers guard against application bugs, **not** against the table owner, a superuser, `DISABLE TRIGGER`, `DROP`, `session_replication_role` or a restore; role separation and tamper-evidence are production obligations (OBL-AUD-1, specification 4.7).
 
 ## 6. Transaction composition alternatives (decision D6)
 
-| Option                                                                        | Trade-offs                                                                                                                                                 |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A. Service calls an `AuditWriter` port in the same `transactional()` unit** | Explicit, uses the existing `TransactionToken`, easy failure injection; every command must remember to call it (mitigated by a helper and by AC-3 tests)   |
-| B. Repository writes audit inside `save`/`add`                                | Impossible to forget; couples persistence to actor and action knowledge and hides audit from the service, and the repository would need the actor          |
-| C. Decorator around the service                                               | Audit is separate from logic; but the decorator sits outside the transaction and could not make state and audit atomic without a second boundary. Rejected |
-| D. Shared audit/transaction framework across contexts                         | Forbidden without separate approval (S0-05 final approval)                                                                                                 |
+| Option                                                                                                                                                                     | Trade-offs                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. Service calls an `AuditWriter` port in the same `transactional()` unit; the adapter uses `PersistenceHandle` + `executorOf(handle, tx)` and rejects a missing token** | Explicit, uses the existing `TransactionToken`, easy failure injection; every command must remember to call it (mitigated by a helper and by AC-3 tests)   |
+| B. Repository writes audit inside `save`/`add`                                                                                                                             | Impossible to forget; couples persistence to actor and action knowledge and hides audit from the service, and the repository would need the actor          |
+| C. Decorator around the service                                                                                                                                            | Audit is separate from logic; but the decorator sits outside the transaction and could not make state and audit atomic without a second boundary. Rejected |
+| D. Shared audit/transaction framework across contexts                                                                                                                      | Forbidden without separate approval (S0-05 final approval)                                                                                                 |
 
-**Recommendation: A.** Audit failure fails closed. **Evidence:** A2.6 (the context-owned port was the validated shape) and the existing atomic version-bump-plus-link. **Blocks:** yes (WP-05).
+**Recommendation: A.** Audit failure fails closed. **v0.2 correction:** v0.1 named `executorFor(db, tx)` for the adapter; the Investigation module never holds a `db`, so the correct, existing design is `executorOf(handle, tx)`, as `DrizzleInvestigationRepository` already does (specification 4.2). `executorOf(handle)` without a token returns the pool, so the adapter must throw when the token is missing. **Evidence:** A2.6 (the context-owned port was the validated shape) and the existing atomic version-bump-plus-link. **Blocks:** yes (WP-05).
 
 ## 7. FU-3 error and precedence matrix
 
 Validation is application-level in the service (the domain takes already-validated input). The matrix lists the first failing step for a request; steps are numbered as in the specification section 7.2.
 
-| Scenario (`current.version = v`)                                                                                         | Outcome                                           | Why                                |
-| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ---------------------------------- |
-| Unknown role, valid everything else                                                                                      | role error                                        | Step 1                             |
-| Unknown case with an invalid `expectedVersion`                                                                           | `case_not_found`                                  | Step 2 before 5                    |
-| Unknown attempt with an invalid `expectedVersion`                                                                        | `attempt_not_found`                               | Step 3 before 5                    |
-| Different UUT with an invalid `expectedVersion`                                                                          | `uut_mismatch`                                    | Step 4 before 5                    |
-| `'3'`, `3n`, `new Number(3)`, `NaN`, `Infinity`, `2.5`, `0`, `-1`, `2147483648`, `9007199254740993`, `undefined`, `null` | `invalid_expected_version`                        | Step 5 (no coercion)               |
-| Valid but ≠ `v`, identical link exists                                                                                   | `concurrency_conflict`                            | Step 6 beats idempotency (Q6 kept) |
-| Valid, `= v`, identical link exists, any `v` including 2147483647                                                        | `ok`, `created: false`, no audit                  | Step 7                             |
-| Valid, `= v = 2147483647`, new link                                                                                      | `version_exhausted`                               | Step 8                             |
-| Valid, `= v < 2147483647`, new link                                                                                      | `ok`, `created: true`, version `v + 1`, one audit | Steps 9                            |
-| Valid, stale, at maximum                                                                                                 | `concurrency_conflict`                            | Step 6                             |
+| Scenario (`current.version = v`)                                                                                         | Outcome                                           | Why                                         |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------- | ------------------------------------------- |
+| Unknown role, valid everything else                                                                                      | role error                                        | Step 1                                      |
+| Unknown case with an invalid `expectedVersion`                                                                           | `case_not_found`                                  | Step 2 before 5                             |
+| Unknown attempt with an invalid `expectedVersion`                                                                        | `attempt_not_found`                               | Step 3 before 5                             |
+| Different UUT with an invalid `expectedVersion`                                                                          | `uut_mismatch`                                    | Step 4 before 5                             |
+| `'3'`, `3n`, `new Number(3)`, `NaN`, `Infinity`, `2.5`, `0`, `-1`, `2147483648`, `9007199254740993`, `undefined`, `null` | `invalid_expected_version`                        | Step 5 (no coercion)                        |
+| Valid but ≠ `v`, identical link exists                                                                                   | `concurrency_conflict`                            | Step 6 beats idempotency (Q6 kept)          |
+| Valid, `= v`, identical link exists, any `v` including 2147483647                                                        | `ok`, `created: false`, no audit                  | Step 7                                      |
+| Valid, `= v = 2147483647`, new link                                                                                      | `version_exhausted`                               | Step 8                                      |
+| Valid, `= v < 2147483647`, new link                                                                                      | `ok`, `created: true`, version `v + 1`, one audit | Steps 9 and 10 (the audit write is stage 2) |
+| Valid, stale, at maximum                                                                                                 | `concurrency_conflict`                            | Step 6                                      |
 
-Unauthenticated and permission-denied precede all rows (step 0). **Alternatives to Option B** (for the record): A, validate at function entry (changes today's precedence for missing cases, rejected by C7); C, validate in the HTTP layer only (a direct call would pass any value). **Recommendation: B** as directed. **Blocks:** WP-01.
+Unauthenticated and permission-denied precede all rows (steps A1 and A2, stage 2). **Alternatives to Option B** (for the record): A, validate at function entry (changes today's precedence for missing cases, rejected by C7); C, validate in the HTTP layer only (a direct call would pass any value). **Recommendation: B** as directed. **Blocks:** WP-01.
 
 ## 8. Migration implications
 
 - New file `infrastructure/database/migrations/0003_create_investigation_audit_record.sql`; `0001` and `0002` are not touched (their checksums stay `c9add3b0…` and `b4914ddb…`).
 - No timestamp defaults (injected clock); check constraints for `action`, `actor_kind`, `schema_version`; update **and** delete rejecting triggers; `comment on table` ownership note.
-- Tests that list tables or migrations (`migrations.integration.test.ts`, `migrations.spec.ts`, and the compiled-runtime child) must be updated in the same work package; the differential and invariant migration tests should be re-run.
+- Tests that list tables or migrations (`migrations.integration.test.ts`, `migrations.spec.ts`, and the compiled-runtime child) are updated in **WP-04** (assigned there, not in WP-06); the differential and invariant migration tests should be re-run.
 - The `integer` version column is not changed (C9). If a future need arises to exceed 2147483647, that is a separate migration decision.
 
 ## 9. Security risks
@@ -175,3 +175,18 @@ Unauthenticated and permission-denied precede all rows (step 0). **Alternatives 
 | Read authorisation (`getUut`, `getTestAttempt`, `getCase`)              | Out of Phase 1, recorded as a known gap                   | No                    |
 | Foreign key from `audit_record.case_id`; `recorded_at` omitted          | FK yes; omit                                              | No                    |
 | Retention period for audit data                                         | Undecided; none needed for synthetic data                 | No                    |
+
+## 12. Revisions in v0.2 (independent architecture review)
+
+| Area                    | Change                                                                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Audit persistence       | `executorFor(db, tx)` replaced by `PersistenceHandle` + `executorOf(handle, tx)`; missing token is an explicit error (section 6)                                                                                   |
+| Actor trust             | Opaque handle, issuer-private claims, trusted clock, foreign-issuer rejection, checks before the transaction (section 3); production isolation and read policy in specification 3                                  |
+| Decision 5              | Historical wording stays CONDITIONAL; the condition is satisfied through the A2 section of the effective-policy file; v0.1's "CONDITIONAL until A2 is effective" is withdrawn as stale                             |
+| FU-3                    | Two stages (existing service plus FU-3; later authenticated integration); full error contracts and the compatibility inventory are in specification 7; precedence now starts with authentication and authorization |
+| Decision 7              | Proposed Amendment A5 drafted in the ADR-025 file with Status PROPOSED; nothing accepted                                                                                                                           |
+| Audit integrity         | Per-action details allowlist, `case_id` rule, foreign key, timestamp provenance, roles and trigger limits, Security Log contract (specification 4)                                                                 |
+| Activation and recovery | One mandatory-audit activation point, startup readiness, no rollback to an unaudited build, forward repair, lost-acknowledgment strategy (specification 6, plan WP-05)                                             |
+| Work packages           | Identity checker rules in WP-02, migration inventory in WP-04, integrated verification only in WP-06; WP-03, WP-05, WP-06 blocked by WP-01; WP-02 and WP-04 independent (plan section 2)                           |
+
+The remaining Owner decisions are in the [decision register](../specs/S0-06-owner-decision-register.md) section 6 and the [remediation matrix](S0-06-review-remediation.md).
