@@ -3,7 +3,7 @@
 - **Document type:** effective-policy summary (derived). **This is not an ADR and has no Status of its own.**
 - **Date:** 2026-11-17
 - **Decision Owner:** SDRIS Engineering Owner
-- **Scope:** ADR-025 (PostgreSQL persistence architecture and migration governance) and its Amendments A1 to A4
+- **Scope:** ADR-025 (PostgreSQL persistence architecture and migration governance) and its Amendments A1 to A5
 - **Related:** [ADR-025](ADR-025-postgresql-persistence-architecture.md), [approval checklist](ADR-025-approval-checklist.md),
   [decision package](ADR-025-decision-package.md), [ADR README](README.md) (conventions "Amendments within one ADR file",
   "Effective-policy records" and "Status statements")
@@ -300,3 +300,66 @@ changes only that Status line and the mirrors of the same value (A4's "Current s
   `customConditions` wherever source resolution is wanted; the API itself is still started by `tsx` in development; no bundling
   and no publish pipeline are introduced.
 - The smoke test needs PostgreSQL and is not in CI until S0-10.
+
+---
+
+## A5 — Investigation-owned audit persistence (S0-06)
+
+**In force from:** the Status commit `docs(adr): accept A5` (not before it).
+
+### Owner decision
+
+**APPROVED**, decided by the Engineering Owner on 2026-11-24 and recorded in the approval checklist, section 5A (commit `83da8a3`):
+Investigation-owned audit persistence in the `investigation` PostgreSQL schema, through the existing ADR lifecycle; **C13 remains
+mandatory** (there is no alternative to A5). The decision was recorded together with the S0-06 decisions D1 to D9 in the
+[S0-06 decision register](../specs/S0-06-owner-decision-register.md), section 6.1, against reviewed HEAD
+`a83406987d336fd6767ca00dcd432198572acedb`. No change to the record's text was required.
+
+### Applicable rules
+
+Source: the ADR-025 file, "Proposed Amendment A5" (the amendment text prevails). It resolves, **for the Investigation context
+only**, the deferral in Decision 7 of "final Audit table schemas" and "concrete table ownership". Decision 7's text, including its
+deferral list, stays exactly as written.
+
+1. **Ownership.** The Investigation context owns its audit writer, persistence port, adapter and audit table. No shared Audit
+   Context, no shared audit package, no cross-context audit table.
+2. **Schema.** The audit table lives in PostgreSQL schema `investigation`; Decision 3 schema ownership is unchanged. Columns,
+   action vocabulary and per-action details are defined by the Owner-approved S0-06 specification, not by A5.
+3. **Committed state changes only.** One authoritative audit record per **committed** state change. Duplicate no-ops, validation
+   failures, concurrency conflicts, authentication or authorization failures and rolled-back transactions create none.
+4. **Same transaction.** The record is written in the same database transaction as the state change through the Investigation-owned
+   `TransactionScope` over the infrastructure `UnitOfWork`, with the context's `PersistenceHandle`-based adapter. A missing or
+   invalid transaction token is an error, never a silent fall back to a non-transactional executor. No cross-context transaction
+   framework.
+5. **Fail closed.** Once audit is mandatory, a state change must not commit without its audit record; if the audit write fails, the
+   state change fails.
+6. **Append-only.** The table rejects update, delete and truncate at the database level. This guards against application defects,
+   **not against a privileged database role**; role separation and tamper-evidence are production obligations A5 does not satisfy.
+7. **Dependency policy.** No change to the allowlists of A1 or A2 is made or implied.
+
+### Dependencies and activation conditions
+
+- **Depends on** ADR-025, A1 and A2, all ACCEPTED. It is independently governed and takes effect only from its own Status commit.
+- A5 does **not** make audit mandatory by itself and does **not** authorize S0-06 implementation. Making audit mandatory happens at
+  the S0-06 activation point (specification 6.2), and implementation authorization is a separate Owner act; **it remains CLOSED**.
+- WP-04 and WP-05 of the S0-06 plan depend on A5 being ACCEPTED; they also remain subject to the other gate items of the S0-06
+  decision register, section 8 (written authorization and an Owner-approved integration SHA).
+
+### Status transition that activates this policy
+
+The `Status` bullet of "Proposed Amendment A5" in the ADR-025 file changes from
+`PROPOSED — Pending Engineering Owner Approval` to `ACCEPTED`, in the commit whose subject is `docs(adr): accept A5`. The commit
+changes only that Status line and the mirrors of the same value (A5's "Current status" cell in the approval checklist). The
+amendment text, including its sentence that Claude Code does not perform the approval steps, is not edited; the steps of this
+workflow were performed on the Engineering Owner's explicit written instruction of 2026-11-24, which the approval checklist
+records.
+
+### Limitations and deferred obligations (unchanged by A5)
+
+- Remains deferred: outbox and inbox schemas and workflow; audit for any other context and any shared audit contract; audit read
+  APIs; retention periods; a security-event database table (a Security Log is a separate, non-authoritative contract);
+  tamper-evidence; separate database roles and DDL restriction; worker retry policy; event publishing; full command idempotency
+  middleware.
+- **OBL-AUD-1** (separate database roles, restricted DDL, tamper-evidence disposition and verification) stays an open
+  production obligation; **OBL-SEC-1** stays open and is not waived. **Accepting an ADR is not security acceptance.**
+- All S0-06 runtime and implementation evidence is NOT_RUN.
