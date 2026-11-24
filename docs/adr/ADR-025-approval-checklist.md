@@ -23,6 +23,7 @@ Acceptance and closure are **pending** (see section 7), and ADR-025 and A1 to A4
 | 6   | S0-05 Domain Specification                                             | APPROVED WITH CHANGES (Owner, [final approval v1.0](../specs/S0-05-final-owner-approval.md)) | [specification](../specs/S0-05-investigation-aggregate-foundation.md)       |
 | 7   | S0-05 Architecture Acceptance record                                   | DRAFT, pending Owner sign-off                                                                | [acceptance record](../specs/S0-05-architecture-acceptance.md)              |
 | 8   | S0-05 Closure record                                                   | DRAFT, closure pending                                                                       | [closure record](../specs/S0-05-closure-record.md)                          |
+| 9   | Amendment A5 — Investigation-owned audit persistence (S0-06)           | PROPOSED                                                                                     | same file, "Proposed Amendment A5"                                          |
 
 ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [gap analysis](../specs/S0-05-gap-analysis.md), the
@@ -264,6 +265,49 @@ Approver (Engineering Owner): Engineering Owner, by explicit instruction in the 
 This records the decision only: A4 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): `218bb6157f32f20954804740f0be388cb2c40b24`
+
+---
+
+## 5A. Amendment A5 — Investigation-owned audit persistence (S0-06)
+
+Commits: `7989422` (ADR text, drafted as PROPOSED for S0-06). The amendment text is frozen from the first Status change of its record.
+
+| Item                                                                                                                                                                                  | Evidence                                                                                      | Owner confirms |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------- |
+| Ownership: the Investigation context owns its audit writer, port, adapter and audit table; no shared Audit Context, package or cross-context audit table                              | A5 rule 1; [S0-06 specification](../specs/S0-06-authentication-audit-foundation.md) section 4 | ☐              |
+| Schema: the audit table lives in PostgreSQL schema `investigation`; columns, actions and details are defined by the approved S0-06 specification                                      | A5 rule 2; specification 4                                                                    | ☐              |
+| Committed state changes only: exactly one authoritative record per committed change; no-ops, validation, conflict, authentication or authorization failures and rollbacks create none | A5 rule 3; specification 5                                                                    | ☐              |
+| Same transaction through the Investigation-owned `TransactionScope` and the `PersistenceHandle` adapter; a missing or invalid token is an error                                       | A5 rule 4; specification 4.2 and its rollback verifications (S0-06 WP-04, WP-05, NOT_RUN)     | ☐              |
+| Fail closed once audit is mandatory                                                                                                                                                   | A5 rule 5; specification 6                                                                    | ☐              |
+| Append-only at the database level; role separation and tamper-evidence stay production obligations (OBL-AUD-1)                                                                        | A5 rule 6; specification 4.7                                                                  | ☐              |
+| No change to the A1 or A2 allowlists; everything listed under "Remains deferred" stays deferred; Decision 7 text unchanged                                                            | A5 rule 7 and its deferral list                                                               | ☐              |
+
+**Open points / trade-offs:** fail-closed audit makes the audit table a hard availability dependency; the append-only guard binds application defects, not a privileged database role; production role separation, DDL restriction, tamper-evidence, retention and the Security Log retention disposition stay open obligations; all S0-06 runtime evidence is NOT_RUN.
+
+**Sign-off**
+
+Decision: ☑ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+
+Changes required: none (no change to the record's text is required).
+
+Conditions and notes recorded by the Owner (non-text):
+
+- C13 remains mandatory: no alternative to A5 exists.
+- A5 does not expand beyond the approved Investigation audit scope and keeps every existing deferral.
+- A5 is not effective before its Status commit; approval of A5 does not authorize S0-06 implementation, and implementation authorization remains CLOSED.
+
+Owner statement, quoted from the project conversation of 2026-11-24 (instruction "SDRIS S0-06 — Formal Engineering Owner Approval and ADR Acceptance"; reviewed HEAD `a83406987d336fd6767ca00dcd432198572acedb`):
+
+> D5 — APPROVED: Audit Ownership and ADR-025 A5
+> Approve Investigation-owned audit persistence in the investigation PostgreSQL schema.
+> Approve the reviewed ADR-025 Amendment A5 through the existing ADR lifecycle.
+> C13 remains mandatory.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-24. Recorded in (link or commit): this checklist, section 5A; commit `docs(adr): record the Owner decision on A5`. The S0-06 decisions D1 to D9 are recorded in the [S0-06 decision register](../specs/S0-06-owner-decision-register.md), section 6.1.
+
+This records the decision only: A5 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
+
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): _pending_
 
 ---
 
