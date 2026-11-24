@@ -307,7 +307,7 @@ Approver (Engineering Owner): Engineering Owner, by explicit instruction in the 
 
 This records the decision only: A5 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
 
-Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): _pending_
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): `ee82f5f284827d20c9dd14326c99ca4eeee09de7`
 
 ---
 
