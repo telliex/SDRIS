@@ -770,7 +770,7 @@ The S0-05 requirement was to validate the transaction abstraction with a real re
 
 ## Proposed Amendment A5 — Investigation-Owned Audit Persistence
 
-- **Status:** PROPOSED — Pending Engineering Owner Approval. Drafted on 2026-11-22 for S0-06. **Not approved.** It changes no other Status line, no effective-policy section and no approval-checklist row; those are updated only through the approval workflow after the Owner decides.
+- **Status:** ACCEPTED — approved by the Engineering Owner on 2026-11-24; in force from its own Status commit. Drafted on 2026-11-22 for S0-06. Approval does not authorize S0-06 implementation; it changes no other Status line.
 - **Resolves:** one of the deferrals of Decision 7 (section 9): "Final Audit table schemas" and "concrete table ownership". It decides ownership for the **Investigation context only**.
 - **Relation to Decision 7:** Decision 7, including its "Deferred implementation" list, **stays exactly as written**. This amendment narrows the deferral for Investigation audit persistence and leaves everything else deferred. If this amendment and Decision 7 are read together, Decision 7's requirements ("No partial authoritative commit", "Audit records must correspond to committed state changes", "Unknown external outcomes must not be silently treated as failures") apply unchanged.
 - **Depends on:** ADR-025, A1 and A2 (accepted). It is independently governed and becomes effective only from its own Status commit.

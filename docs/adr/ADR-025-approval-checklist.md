@@ -23,7 +23,7 @@ Acceptance and closure are **pending** (see section 7), and ADR-025 and A1 to A4
 | 6   | S0-05 Domain Specification                                             | APPROVED WITH CHANGES (Owner, [final approval v1.0](../specs/S0-05-final-owner-approval.md)) | [specification](../specs/S0-05-investigation-aggregate-foundation.md)       |
 | 7   | S0-05 Architecture Acceptance record                                   | DRAFT, pending Owner sign-off                                                                | [acceptance record](../specs/S0-05-architecture-acceptance.md)              |
 | 8   | S0-05 Closure record                                                   | DRAFT, closure pending                                                                       | [closure record](../specs/S0-05-closure-record.md)                          |
-| 9   | Amendment A5 — Investigation-owned audit persistence (S0-06)           | PROPOSED                                                                                     | same file, "Proposed Amendment A5"                                          |
+| 9   | Amendment A5 — Investigation-owned audit persistence (S0-06)           | ACCEPTED                                                                                     | same file, "Proposed Amendment A5"                                          |
 
 ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [gap analysis](../specs/S0-05-gap-analysis.md), the
