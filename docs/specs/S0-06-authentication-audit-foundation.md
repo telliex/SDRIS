@@ -1,6 +1,6 @@
-# S0-06 — Authentication and Audit Foundation (Specification v0.4, DRAFT)
+# S0-06 — Authentication and Audit Foundation (Specification v0.4, OWNER-APPROVED BASELINE)
 
-**Status:** DRAFT, an **Owner Approval Candidate** after two independent architecture reviews (the first: REVISE, 1 BLOCKER, 5 MAJOR, 2 MINOR; the second remediation verification: REVISE). **Not approved. S0-06 implementation is NOT STARTED.** Everything below is a proposal built on the directions C1 to C10 of the [decision register](S0-06-owner-decision-register.md); no decision in it is formally approved.
+**Status:** **Approved by the Engineering Owner on 2026-11-24 as the task-level requirements baseline (decision D1), with D2 to D9**, against the reviewed HEAD `a83406987d336fd6767ca00dcd432198572acedb` after the final independent Codex focused review returned READY FOR OWNER APPROVAL (see the [decision register](S0-06-owner-decision-register.md), section 6.1). The wording "proposed" below describes how each contract was drafted; the approved contracts are those of this text at that HEAD. **Approval is not implementation authorization: implementation authorization is CLOSED, S0-06 implementation is NOT STARTED, and every acceptance criterion is NOT_RUN.**
 
 - **Date:** 2026-11-22.
 - **Reviewed baseline (pinned):** `main` at `ae7dc51b94b589c33ae8a1218b4d72d036e9fa21` (documents reviewed at branch HEAD `24b73c8`). **Integration base (Owner-approved SHA):** the reviewed baseline is **not** the integration base by default. Each package is cut from an **integration SHA that the Owner approves in the written implementation authorization** (register section 8). Before the branch is cut the implementer verifies that `ae7dc51` is an ancestor of the approved SHA (`git merge-base --is-ancestor ae7dc51 <approved SHA>`), that the approved SHA is an ancestor of, or equal to, the current `origin/main` tip, and diffs the files this specification names (`investigation-service.ts`, the ports, `persistence-handle.ts`, `unit-of-work.ts`, `dependency-matrix.json`, migrations) between `ae7dc51` and the approved SHA. Any difference, and any movement of `origin/main` since the approval, is reported to the Owner, who re-approves or confirms in writing before the branch is cut. "`main` is unchanged" and "cut from the current main" are never assumed.
@@ -179,9 +179,9 @@ Flat grants from the principal table; no hierarchy, resource rules or delegation
 
 Limit: an environment variable is a configuration source, not a boundary against someone who controls the process. The rule prevents accidental and mispackaged use, not a hostile operator.
 
-### 3.3 Authenticated reads (Owner-proposed direction; breaking contract not approved)
+### 3.3 Authenticated reads (C11, approved 2026-11-24; breaking contract)
 
-The Owner's proposed direction is that Investigation reads require authentication in S0-06 Stage 2. This is recorded as direction **C11** in the decision register. It changes the S0-05 read signatures, so it is **not treated as approved** until the Owner confirms it (D3 and D8). Stage 1 (FU-3) leaves the reads unchanged.
+The Owner's proposed direction is that Investigation reads require authentication in S0-06 Stage 2. This is recorded as direction **C11** in the decision register and was **approved by the Owner on 2026-11-24** (D3 and D8). It changes the S0-05 read signatures, which is a documented breaking public-contract change. Stage 1 (FU-3) leaves the reads unchanged.
 
 **Why reads need an error contract.** Today the reads return `Promise<X | undefined>`: there is no place for a rejection. Operational failures elsewhere in the service are **returned as `Result` values** and only unexpected failures are thrown (specification 1.1 and the `InvestigationServiceError` documentation).
 
@@ -332,7 +332,7 @@ So an untrusted trace field cannot carry arbitrary sensitive data: `source` and 
 
 **Database roles (assumption for production; not enforceable locally).** The application should connect as a role with `INSERT` and `SELECT` on `investigation.audit_record` and no `UPDATE`, `DELETE`, `TRUNCATE` or DDL rights, while migrations run as a separate owner role. The local setup uses one role (`sdris_local`) that owns everything, so Phase 1 does **not** demonstrate privilege separation.
 
-**OBL-AUD-1 (proposed production-deployment obligation; not a gate for S0-06; Pending Formal Approval).** Before any production deployment that relies on the audit table: (1) database privilege separation as above, verified by a catalogue query of effective grants for the application role; (2) restriction of DDL on the audit table and its triggers to the owner role, with a test as a non-owner role attempting `DROP TRIGGER`, `ALTER TABLE … DISABLE TRIGGER` and `TRUNCATE`, all of which must fail; (3) an Owner decision on tamper-evidence (hash chaining, external anchoring or none) recorded with its rationale. Like OBL-SEC-1 it stays open until the Owner records a disposition.
+**OBL-AUD-1 (production-deployment obligation, recorded as open by the Owner on 2026-11-24; not a gate for S0-06).** Before any production deployment that relies on the audit table: (1) database privilege separation as above, verified by a catalogue query of effective grants for the application role; (2) restriction of DDL on the audit table and its triggers to the owner role, with a test as a non-owner role attempting `DROP TRIGGER`, `ALTER TABLE … DISABLE TRIGGER` and `TRUNCATE`, all of which must fail; (3) an Owner decision on tamper-evidence (hash chaining, external anchoring or none) recorded with its rationale. Like OBL-SEC-1 it stays open until the Owner records a disposition.
 
 **Security Log: responsibility and contract.** Two layers log, and each logs only what it can see. **A call without a valid handle** reaches the service, which is the first code that sees every call, including direct calls with no HTTP involved: **the Investigation application service is the responsible logging layer** for `security.unauthenticated`, `security.invalid_request_context` and `security.permission_denied`. **A refusal before any handle exists** (an unknown principal key, a forbidden synthetic issuance, a bad credential) never reaches the service: **the issuer is the responsible logging layer** for `security.issuance_refused` (2.10). The service and it emits the event through an Investigation `SecurityLog` port implemented by a logger adapter that the composition root injects. A framework or transport log added later by S0-07 is separate and is not this contract. The log is a structured log, not a database table; a security-event table would need separate Owner approval.
 
@@ -603,7 +603,7 @@ Stage 1 tests run against the existing signatures; races run on real PostgreSQL 
 
 The `integer` column and `check (version >= 1)` are unchanged (C9). Step 8 runs only when `current.version === expectedVersion` (step 6) and fails when that version is 2147483647, so `save` never evaluates `version + 1` past the maximum. At the maximum: a matching duplicate stays `ok` with `created: false` and writes no audit record; a stale value yields `concurrency_conflict`; only a new link fails.
 
-## 8. Acceptance criteria (proposed, testable)
+## 8. Acceptance criteria (approved with D9 on 2026-11-24; not yet satisfied; testable)
 
 All persistence criteria run against real PostgreSQL (ADR-025 Decision 10). **The criteria themselves (this table) are approved by the Owner under D9 before implementation starts.** Evidence is **produced during implementation** in the package named in the last column and **consolidated in WP-06**; no criterion is satisfied by this document. The reviewed SHA `ae7dc51` is not automatically the integration SHA (front matter).
 

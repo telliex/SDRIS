@@ -1,6 +1,6 @@
 # S0-06 — Implementation Plan (PLANNING ONLY, v0.2 DRAFT)
 
-**Status:** DRAFT plan. **Do not execute.** S0-06 is NOT STARTED and no work package may start until the gate in section 1 is open. Everything depends on the Owner decisions D1 to D9 in the [decision register](../specs/S0-06-owner-decision-register.md) and may change with them. Revised after the independent architecture review; see the [remediation matrix](../reviews/S0-06-review-remediation.md).
+**Status:** DRAFT plan. **Do not execute.** S0-06 is NOT STARTED and no work package may start until the gate in section 1 is open. The Owner approved D1 to D9 on 2026-11-24 (see the [decision register](../specs/S0-06-owner-decision-register.md), section 6.1); that approval does **not** authorize implementation. Revised after the independent architecture review; see the [remediation matrix](../reviews/S0-06-review-remediation.md).
 
 - **Date:** 2026-11-22. **Reviewed baseline (pinned):** `main` at `ae7dc51b94b589c33ae8a1218b4d72d036e9fa21`.
 - **Integration base rule (every package):** the package is cut from the **integration SHA the Owner approves in the written authorization**, not from "the current main". Before the branch is cut: `git merge-base --is-ancestor ae7dc51 <approved SHA>`; the approved SHA must be an ancestor of or equal to the `origin/main` tip; diff the files this plan names between `ae7dc51` and the approved SHA; report any difference, and any movement of `origin/main` since the approval, to the Owner for re-approval or written confirmation. Never assume the reviewed baseline is the integration base.
@@ -9,7 +9,7 @@
 
 ## 1. Start gate
 
-Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate today: CLOSED.**
+Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate (2026-11-24): CLOSED.** The decisions are recorded and A5 follows the ADR workflow, but the written implementation authorization and the Owner-approved integration SHA are still missing.
 
 ## 2. Dependencies and parallelism
 
