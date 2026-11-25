@@ -9,6 +9,12 @@ import {
   createInvestigationService,
   type InvestigationService,
 } from '../application/investigation-service';
+export type {
+  ActorHandle,
+  ActorResolution,
+  ActorResolver,
+  VerifiedActor,
+} from '../application/ports/actor-resolver';
 import { DrizzleInvestigationRepository } from '../infrastructure/persistence/drizzle-investigation-repository';
 import { PersistenceTransactionScope } from '../infrastructure/persistence/persistence-transaction-scope';
 

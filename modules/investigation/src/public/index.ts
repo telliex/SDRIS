@@ -19,3 +19,4 @@ export type {
   InvestigationServiceError,
   LinkResult,
 } from '../application/investigation-service';
+export type { ActorHandle } from '../application/ports/actor-resolver';
