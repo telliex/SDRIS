@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +54,47 @@ test(
     );
   },
 );
+
+test('apps/api/dist ships no identity fixtures, no fixture principal ids and no credential-like literal', () => {
+  // Runs after the clean build above (tests of one file run in order). Packaging check of specification 3.2.
+  const distRoot = path.join(repo, 'apps', 'api', 'dist');
+  assert.ok(existsSync(distRoot), 'apps/api/dist must exist after the build');
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else files.push(full);
+    }
+  };
+  walk(distRoot);
+  assert.ok(files.length > 0);
+  assert.deepEqual(
+    files.filter((f) => /\.fixtures\./.test(path.basename(f))).map((f) => path.relative(repo, f)),
+    [],
+    'no *.fixtures.* file may be built',
+  );
+  assert.ok(
+    existsSync(path.join(distRoot, 'composition', 'identity', 'synthetic-issuer.js')),
+    'the identity module itself is built (the scan is not vacuous)',
+  );
+  const fixtureIds = /0190a5b0-0000-7000-8000-00000000f00[0-9a-f]/;
+  const credentialLike =
+    /(password|passwd|secret|api[_-]?key|token)\s*[:=]\s*['"][^'"\s]{4,}['"]|bearer\s+[a-z0-9._-]{8,}/i;
+  for (const file of files.filter((f) => /\.(js|d\.ts|map)$/.test(f))) {
+    const text = readFileSync(file, 'utf8');
+    assert.ok(
+      !fixtureIds.test(text),
+      `fixture principal id literal in ${path.relative(repo, file)}`,
+    );
+    if (file.includes(`${path.sep}identity${path.sep}`)) {
+      assert.ok(
+        !credentialLike.test(text),
+        `credential-like literal in ${path.relative(repo, file)}`,
+      );
+    }
+  }
+});
 
 test('TypeScript consumers resolve declarations; the source condition resolves source', () => {
   const containing = path.join(repo, 'apps', 'api', 'src', 'composition', 'consumer.ts');
@@ -133,6 +174,8 @@ test(
       'no NODE_OPTIONS',
       'no .ts extension handler registered',
       'composition returns a service',
+      'positive control: an ephemeral principal obtains a handle that resolves',
+      'every refusal happened before any query or connection checkout',
       'register UUT keeps the serial number as given',
       'register test attempt',
       'invalid stage rejected',
@@ -156,5 +199,12 @@ test(
       'no tsx module is loaded',
     ];
     for (const name of expected) assert.equal(checks[name], true, name);
+    const negatives = Object.keys(checks).filter((name) => name.startsWith('negative control '));
+    assert.equal(
+      negatives.length,
+      6,
+      'the paired negative controls ran for every forbidden environment',
+    );
+    for (const name of negatives) assert.equal(checks[name], true, name);
   },
 );

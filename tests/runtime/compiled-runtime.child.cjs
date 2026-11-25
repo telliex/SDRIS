@@ -53,6 +53,12 @@ const causedBy = (error, pattern) => {
   const { composeInvestigation } = require(
     path.join(repo, 'apps', 'api', 'dist', 'composition', 'investigation.composition.js'),
   );
+  // The compiled identity module (S0-06 WP-02). Its fixtures are excluded from the build, so the principals of this
+  // process are created here with random ids; no fixture file is needed or present in dist.
+  const identity = require(
+    path.join(repo, 'apps', 'api', 'dist', 'composition', 'identity', 'index.js'),
+  );
+  const environmentOf = (record) => identity.readTrustedEnvironment(record);
   const target = await testing.createIsolatedDatabase();
   try {
     const pool = target.connection.pool;
@@ -61,8 +67,69 @@ const causedBy = (error, pattern) => {
       'migration',
       path.join(repo, 'infrastructure', 'database', 'migrations'),
     );
-    const { service } = composeInvestigation(target.connection);
+    // Paired startup verification (specification 3.2): the positive control, then the same code, database and
+    // principal list with only the environment changed. A refusal must carry code SYNTHETIC_IDENTITY_FORBIDDEN
+    // and happen before any query or connection checkout.
+    const { service } = composeInvestigation(
+      target.connection,
+      environmentOf({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+    );
     check('composition returns a service', typeof service.linkAttempt === 'function');
+    const principal = {
+      key: 'compiled-runtime-principal',
+      actor: { entityType: 'Actor', id: kernel.newEntityId() },
+      actorKind: 'SYSTEM',
+      permissions: ['investigation.read'],
+    };
+    const issuerFor = (record) =>
+      identity.createSyntheticIssuer({
+        environment: environmentOf(record),
+        clock: () => kernel.timestampFromDate(new Date()).value,
+        principals: [principal],
+        securityEvents: () => undefined,
+      });
+    const positiveIssuer = issuerFor({ SDRIS_ENV: 'test', NODE_ENV: 'test' });
+    const issued = positiveIssuer.issue(principal.key);
+    check(
+      'positive control: an ephemeral principal obtains a handle that resolves',
+      issued.status === 'issued' &&
+        positiveIssuer.resolver.resolve(issued.handle).status === 'valid',
+    );
+    let counted = 0;
+    const realQuery = pool.query.bind(pool);
+    const realConnect = pool.connect.bind(pool);
+    pool.query = (...args) => ((counted += 1), realQuery(...args));
+    pool.connect = (...args) => ((counted += 1), realConnect(...args));
+    const forbiddenEnvironments = [
+      { NODE_ENV: 'production', SDRIS_ENV: 'test' },
+      { NODE_ENV: 'test' },
+      { NODE_ENV: 'test', SDRIS_ENV: '' },
+      { NODE_ENV: 'test', SDRIS_ENV: 'prod' },
+      { NODE_ENV: 'test', SDRIS_ENV: 'Test' },
+      { NODE_ENV: 'production', SDRIS_ENV: 'local' },
+    ];
+    for (const record of forbiddenEnvironments) {
+      let compose;
+      let issuer;
+      try {
+        composeInvestigation(target.connection, environmentOf(record));
+      } catch (error) {
+        compose = error;
+      }
+      try {
+        issuerFor(record);
+      } catch (error) {
+        issuer = error;
+      }
+      check(
+        `negative control ${JSON.stringify(record)}: compose and issuer refuse with SYNTHETIC_IDENTITY_FORBIDDEN`,
+        compose?.code === 'SYNTHETIC_IDENTITY_FORBIDDEN' &&
+          issuer?.code === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+      );
+    }
+    check('every refusal happened before any query or connection checkout', counted === 0);
+    pool.query = realQuery;
+    pool.connect = realConnect;
 
     const registerUut = async () => {
       const result = await service.registerUut({ serialNumber: ' SN-SYNTHETIC ' });
