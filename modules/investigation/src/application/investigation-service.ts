@@ -283,16 +283,19 @@ export function createInvestigationService(
         const outcome = linkTestAttempt(current, attempt, role.value, deps.now());
         if (!outcome.ok) return err(outcome.error);
         // FU-3 step 5: runtime validation, after existence and same-UUT, before the version comparison.
-        const invalid = validateExpectedVersion(command.expectedVersion);
+        // Read once: a JavaScript accessor can answer differently on each read, so the value that is validated is the
+        // value that is compared and reported.
+        const expectedVersion = command.expectedVersion;
+        const invalid = validateExpectedVersion(expectedVersion);
         if (invalid) return err(invalid);
         // Expected Version takes precedence over duplicate-link idempotency (Owner decision Q6).
-        if (current.version !== command.expectedVersion) {
+        if (current.version !== expectedVersion) {
           return err(
             createError({
               code: 'investigation.concurrency_conflict' as const,
               message:
                 'The case is not at the version the request was based on; re-read the case and decide again.',
-              details: { expectedVersion: command.expectedVersion, actualVersion: current.version },
+              details: { expectedVersion, actualVersion: current.version },
             }),
           );
         }

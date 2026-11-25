@@ -666,4 +666,84 @@ describe('InvestigationService', () => {
       assert.ok(!repeat.ok && repeat.error.code === 'investigation.concurrency_conflict');
     });
   });
+
+  /**
+   * Regression (independent review of WP-01): `expectedVersion` is read once, at step 5, and that single value is the
+   * one validated, compared and reported. A JavaScript accessor can answer differently on each read.
+   */
+  describe('expectedVersion is read exactly once (FU-3)', () => {
+    const accessorCommand = (
+      c: InvestigationCase,
+      a: TestAttempt,
+      role: string,
+      answers: unknown[],
+    ) => {
+      const counter = { reads: 0 };
+      const command = {
+        caseId: c.id,
+        attemptId: a.id,
+        role,
+        get expectedVersion(): number {
+          const answer = answers[Math.min(counter.reads, answers.length - 1)];
+          counter.reads += 1;
+          return answer as number;
+        },
+      };
+      return { command, counter };
+    };
+
+    it('validates, compares and reports the same captured value (first read 2, later reads 1, case at version 1)', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const { command, counter } = accessorCommand(c, a, 'RETEST', [2, 1]);
+      const savesBefore = store.saves;
+      const result = await service.linkAttempt(command);
+      assert.equal(counter.reads, 1, 'the accessor was read exactly once');
+      assert.ok(!result.ok && result.error.code === 'investigation.concurrency_conflict');
+      assert.deepEqual(result.error.details, { expectedVersion: 2, actualVersion: 1 });
+      assert.equal(store.saves, savesBefore, 'the repository was never asked to save');
+      assert.equal(store.versions.get(c.id), 1);
+      assert.equal((await service.getCase(c.id))?.links.length, 0);
+    });
+
+    it('an invalid captured value is rejected from that one read (first read invalid, later reads valid)', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const { command, counter } = accessorCommand(c, a, 'RETEST', ['3', 1]);
+      const result = await service.linkAttempt(command);
+      assert.equal(counter.reads, 1);
+      assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+      assert.equal(store.versions.get(c.id), 1);
+    });
+
+    it('earlier validation failures never read expectedVersion', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const foreign = await attemptOf(await uut());
+      const badRole = accessorCommand(c, a, 'retest', [1]);
+      const noCase = accessorCommand(
+        { ...c, id: newEntityId<'InvestigationCase'>() as InvestigationCaseId },
+        a,
+        'RETEST',
+        [1],
+      );
+      const noAttempt = accessorCommand(
+        c,
+        { ...a, id: newEntityId<'TestAttempt'>() as TestAttemptId },
+        'RETEST',
+        [1],
+      );
+      const crossUut = accessorCommand(c, foreign, 'RETEST', [1]);
+      assert.ok(!(await service.linkAttempt(badRole.command)).ok);
+      assert.ok(!(await service.linkAttempt(noCase.command)).ok);
+      assert.ok(!(await service.linkAttempt(noAttempt.command)).ok);
+      assert.ok(!(await service.linkAttempt(crossUut.command)).ok);
+      for (const { counter } of [badRole, noCase, noAttempt, crossUut]) {
+        assert.equal(counter.reads, 0, 'expectedVersion is not read before step 5');
+      }
+    });
+  });
 });
