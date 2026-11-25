@@ -18,7 +18,7 @@
 - **It adds traceability, never a rule.** It names the Owner decision, the rules that apply (by their source in the ADR-025
   file), the activation conditions, the exact Status transition and the open limitations. If it ever disagrees with the ADR text,
   **the ADR text prevails.**
-- ADR-025 and A1 to A4 are independently governed records. Approving one does not approve another.
+- ADR-025 and A1 to A5 are independently governed records. Approving one does not approve another.
 
 ---
 
