@@ -694,6 +694,77 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
       assert.equal(await caseVersion(c.id), 2);
     });
+
+    /** S0-06 FU-3 step 8 on real PostgreSQL (specification 7.5.3, 7.5.7a and 7.7). */
+    describe('version exhaustion', () => {
+      const MAX = 2147483647;
+      /** Test-only SQL on the isolated database: place a case at a chosen stored version. */
+      const seedVersion = (id: string, version: number) =>
+        sql('update investigation.investigation_case set version = $2 where id = $1', [
+          id,
+          version,
+        ]);
+
+      it('refuses a new link at the maximum version before any write; PostgreSQL never raises 22003 and the column is unchanged', async () => {
+        const { u, c, a } = await scenario();
+        const b = await attempt(u);
+        assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
+        await seedVersion(c.id, MAX);
+        const before = await counts();
+        const fresh = await linkAt(MAX, { caseId: c.id, attemptId: b.id, role: 'INITIAL_FAILURE' });
+        assert.ok(!fresh.ok && fresh.error.code === 'investigation.version_exhausted');
+        assert.deepEqual(fresh.error.details, { actualVersion: MAX, maximumVersion: MAX });
+        // a link of the already linked attempt with a different role is also a new link
+        const otherRole = await linkAt(MAX, { caseId: c.id, attemptId: a.id, role: 'SUPPORTING' });
+        assert.ok(!otherRole.ok && otherRole.error.code === 'investigation.version_exhausted');
+        assert.deepEqual(await counts(), before);
+        assert.equal(await caseVersion(c.id), MAX);
+        const [column] = await sql(
+          "select data_type from information_schema.columns where table_schema = 'investigation' and table_name = 'investigation_case' and column_name = 'version'",
+        );
+        assert.equal(column.data_type, 'integer');
+      });
+
+      it('at the maximum a matching duplicate is ok with created false, a stale value is a service-shape conflict, MAX + 1 is invalid input', async () => {
+        const { u, c, a } = await scenario();
+        const b = await attempt(u);
+        assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
+        await seedVersion(c.id, MAX);
+        const before = await counts();
+        const duplicate = await linkAt(MAX, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
+        assert.ok(duplicate.ok && !duplicate.value.created && duplicate.value.version === MAX);
+        const stale = await linkAt(MAX - 1, { caseId: c.id, attemptId: b.id, role: 'CONTEXT' });
+        assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+        assert.deepEqual(stale.error.details, { expectedVersion: MAX - 1, actualVersion: MAX });
+        const tooBig = await linkAt(MAX + 1, { caseId: c.id, attemptId: b.id, role: 'CONTEXT' });
+        assert.ok(!tooBig.ok && tooBig.error.code === 'investigation.invalid_expected_version');
+        assert.deepEqual(await counts(), before);
+        assert.equal(await caseVersion(c.id), MAX);
+      });
+
+      it('sequential boundary: MAX - 1 to MAX succeeds, the next different link is exhausted, a repeat of the first request is a conflict', async () => {
+        const { u, c, a } = await scenario();
+        const b = await attempt(u);
+        await seedVersion(c.id, MAX - 1);
+        const last = await linkAt(MAX - 1, {
+          caseId: c.id,
+          attemptId: a.id,
+          role: 'INITIAL_FAILURE',
+        });
+        assert.ok(last.ok && last.value.created && last.value.version === MAX);
+        assert.equal(await caseVersion(c.id), MAX);
+        const next = await linkAt(MAX, { caseId: c.id, attemptId: b.id, role: 'RETEST' });
+        assert.ok(!next.ok && next.error.code === 'investigation.version_exhausted');
+        const repeat = await linkAt(MAX - 1, {
+          caseId: c.id,
+          attemptId: a.id,
+          role: 'INITIAL_FAILURE',
+        });
+        assert.ok(!repeat.ok && repeat.error.code === 'investigation.concurrency_conflict');
+        assert.deepEqual(repeat.error.details, { expectedVersion: MAX - 1, actualVersion: MAX });
+        assert.equal((await service.getCase(c.id))?.links.length, 1);
+      });
+    });
   });
 
   describe('same-UUT protection', () => {
@@ -1139,6 +1210,46 @@ describe('Investigation links through the apps/api composition root (real Postgr
       );
       assert.equal(stale.length, 0, 'the stale version no longer matches');
       assert.equal(await caseVersion(c.id), 2);
+    });
+
+    /** Repository-shape race (specification 7.5.5): both writers pass the service comparison, the UPDATE decides. */
+    it('repository-shape conflict: the loser of a concurrent pair carries expectedVersion and no actualVersion', async () => {
+      const { u, c, a } = await scenario();
+      const b = await attempt(u);
+      const results = await writersBehindARowLock(c, [
+        () => linkAt(1, { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' }),
+        () => linkAt(1, { caseId: c.id, attemptId: b.id, role: 'RETEST' }),
+      ]);
+      assert.equal(results.filter((r) => r.ok).length, 1);
+      const lost = results.find((r) => !r.ok)!;
+      assert.ok(!lost.ok && lost.error.code === 'investigation.concurrency_conflict');
+      assert.deepEqual(lost.error.details, { expectedVersion: 1 });
+      assert.ok(!('actualVersion' in (lost.error.details ?? {})));
+      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal(await caseVersion(c.id), 2);
+    });
+
+    /** Race at the boundary (specification 7.5.7). */
+    it('race at the boundary: two concurrent new links at MAX - 1, one reaches MAX and the other conflicts; the next new link is exhausted', async () => {
+      const MAX = 2147483647;
+      const { u, c, a } = await scenario();
+      const [b, d] = [await attempt(u), await attempt(u)];
+      await sql('update investigation.investigation_case set version = $2 where id = $1', [
+        c.id,
+        MAX - 1,
+      ]);
+      const results = await writersBehindARowLock(c, [
+        () => linkAt(MAX - 1, { caseId: c.id, attemptId: a.id, role: 'INITIAL_FAILURE' }),
+        () => linkAt(MAX - 1, { caseId: c.id, attemptId: b.id, role: 'RETEST' }),
+      ]);
+      assert.equal(results.filter((r) => r.ok).length, 1);
+      const lost = results.find((r) => !r.ok)!;
+      assert.ok(!lost.ok && lost.error.code === 'investigation.concurrency_conflict');
+      assert.deepEqual(lost.error.details, { expectedVersion: MAX - 1 });
+      assert.equal(await caseVersion(c.id), MAX);
+      const next = await linkAt(MAX, { caseId: c.id, attemptId: d.id, role: 'CONTEXT' });
+      assert.ok(!next.ok && next.error.code === 'investigation.version_exhausted');
+      assert.equal(await caseVersion(c.id), MAX);
     });
   });
 });

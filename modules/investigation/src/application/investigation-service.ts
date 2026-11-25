@@ -40,6 +40,7 @@ export type InvestigationServiceError =
   | InvestigationDomainError
   | InvalidTestStageError
   | InvalidExpectedVersionError
+  | VersionExhaustedError
   | RepositoryError
   | SdrisError<NotFoundErrorCode, { readonly actual: string }>;
 
@@ -138,6 +139,16 @@ class Rollback extends Error {
     super(failure.code);
   }
 }
+
+/**
+ * A new link needs `version + 1` but the case is already at the largest storable version (S0-06 FU-3, specification
+ * 7.4.3). Returned as a value, before any write, so the repository never evaluates an increment past the `integer`
+ * maximum. A matching duplicate (no increment) and a stale request (a conflict) never produce it.
+ */
+export type VersionExhaustedError = SdrisError<
+  'investigation.version_exhausted',
+  { readonly actualVersion: 2147483647; readonly maximumVersion: 2147483647 }
+>;
 
 /**
  * Runtime validation of the caller's `expectedVersion` (the type system does not protect a JavaScript caller). No
@@ -278,6 +289,20 @@ export function createInvestigationService(
             link: outcome.value.link,
             created: false,
           });
+        }
+        // FU-3 step 8: a new link needs version + 1. At the largest storable version that is refused explicitly,
+        // before any write; the column stays `integer` (C9).
+        if (current.version >= MAX_EXPECTED_VERSION) {
+          return err(
+            createError({
+              code: 'investigation.version_exhausted' as const,
+              message: 'The case is at the largest storable version; no further link can be added.',
+              details: {
+                actualVersion: MAX_EXPECTED_VERSION,
+                maximumVersion: MAX_EXPECTED_VERSION,
+              } as const,
+            }),
+          );
         }
         const saved = await deps.repository.save(outcome.value.investigationCase, tx);
         return saved.ok

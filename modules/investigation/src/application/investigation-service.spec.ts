@@ -589,4 +589,81 @@ describe('InvestigationService', () => {
       assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
     });
   });
+
+  /** S0-06 FU-3 step 8 (specification 7.4.3, 7.5.3 and 7.7). The fake store has no integer limit; the service must stop first. */
+  describe('version exhaustion (FU-3)', () => {
+    const MAX_VERSION = 2147483647;
+    const linkAt = (c: InvestigationCase, a: TestAttempt, role: string, expectedVersion: number) =>
+      service.linkAttempt({ caseId: c.id, attemptId: a.id, role, expectedVersion });
+    const caseAtMaximum = async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      assert.ok((await linkAt(c, a, 'RETEST', 1)).ok);
+      store.versions.set(c.id, MAX_VERSION); // test-only seeding of the stored version
+      return { u, c, a };
+    };
+
+    it('a new link at the maximum version returns version_exhausted and never reaches save', async () => {
+      const { u, c } = await caseAtMaximum();
+      const other = await attemptOf(u);
+      const savesBefore = store.saves;
+      const result = await linkAt(c, other, 'INITIAL_FAILURE', MAX_VERSION);
+      assert.ok(!result.ok && result.error.code === 'investigation.version_exhausted');
+      assert.deepEqual(result.error.details, {
+        actualVersion: MAX_VERSION,
+        maximumVersion: MAX_VERSION,
+      });
+      assert.equal(store.saves, savesBefore, 'no write was attempted');
+      assert.equal(store.versions.get(c.id), MAX_VERSION);
+      assert.equal((await service.getCase(c.id))?.links.length, 1);
+    });
+
+    it('another role for an already linked attempt is a new link and is also exhausted', async () => {
+      const { c, a } = await caseAtMaximum();
+      const savesBefore = store.saves;
+      const result = await linkAt(c, a, 'SUPPORTING', MAX_VERSION);
+      assert.ok(!result.ok && result.error.code === 'investigation.version_exhausted');
+      assert.equal(store.saves, savesBefore);
+    });
+
+    it('a matching duplicate at the maximum stays ok with created false and writes nothing', async () => {
+      const { c, a } = await caseAtMaximum();
+      const savesBefore = store.saves;
+      const result = await linkAt(c, a, 'RETEST', MAX_VERSION);
+      assert.ok(result.ok && !result.value.created && result.value.version === MAX_VERSION);
+      assert.equal(store.saves, savesBefore);
+    });
+
+    it('a stale value at the maximum is a service-shape conflict, not an exhaustion', async () => {
+      const { u, c } = await caseAtMaximum();
+      const other = await attemptOf(u);
+      const result = await linkAt(c, other, 'CONTEXT', MAX_VERSION - 1);
+      assert.ok(!result.ok && result.error.code === 'investigation.concurrency_conflict');
+      assert.deepEqual(result.error.details, {
+        expectedVersion: MAX_VERSION - 1,
+        actualVersion: MAX_VERSION,
+      });
+    });
+
+    it('MAX + 1 is invalid input, not an exhaustion', async () => {
+      const { u, c } = await caseAtMaximum();
+      const other = await attemptOf(u);
+      const result = await linkAt(c, other, 'CONTEXT', MAX_VERSION + 1);
+      assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+    });
+
+    it('the last increment is allowed: from MAX - 1 a new link reaches MAX, the next new link is exhausted', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const [a, b] = [await attemptOf(u), await attemptOf(u)];
+      store.versions.set(c.id, MAX_VERSION - 1);
+      const last = await linkAt(c, a, 'INITIAL_FAILURE', MAX_VERSION - 1);
+      assert.ok(last.ok && last.value.created && last.value.version === MAX_VERSION);
+      const next = await linkAt(c, b, 'RETEST', MAX_VERSION);
+      assert.ok(!next.ok && next.error.code === 'investigation.version_exhausted');
+      const repeat = await linkAt(c, a, 'INITIAL_FAILURE', MAX_VERSION - 1);
+      assert.ok(!repeat.ok && repeat.error.code === 'investigation.concurrency_conflict');
+    });
+  });
 });
