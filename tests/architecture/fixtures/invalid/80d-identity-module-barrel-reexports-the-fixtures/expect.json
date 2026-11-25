@@ -1,0 +1,5 @@
+{
+  "violations": [
+    { "rule": "identity/fixtures-import", "file": "apps/api/src/composition/identity/index.ts" }
+  ]
+}

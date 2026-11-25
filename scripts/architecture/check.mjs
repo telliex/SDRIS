@@ -52,6 +52,12 @@ const COMPOSITION_ZONE = 'composition';
 const COMPOSITION_SUBPATH = './composition';
 
 const isInside = (file, dir) => file === dir || file.startsWith(dir + path.sep);
+// S0-06 WP-02 identity rules (specification 3.2). These are checker rules, not policy entries: no allowlist in the
+// dependency matrix is added or widened. The identity module is the synthetic issuer of the application composition
+// root; only composition code and recognised test files may import it, and its fixtures only from recognised tests.
+const IDENTITY_DIR = ['apps', 'api', 'src', 'composition', 'identity'];
+const IDENTITY_COMPOSITION_DIR = ['apps', 'api', 'src', 'composition'];
+const FIXTURE_FILE = /\.fixtures\.[cm]?[jt]sx?$/;
 
 const matchesPath = (pattern, file) =>
   pattern.endsWith('/**') ? file.startsWith(pattern.slice(0, -2)) : file === pattern;
@@ -426,6 +432,40 @@ export function checkArchitecture({ root, matrixPath } = {}) {
                 hint: 'Only recognised test files (*.test.ts, *.spec.ts, __tests__/) and the approvedPaths listed in testOnlyEntrypoints may use it.',
               },
             );
+          }
+        }
+        if (target.resolvedFile !== undefined) {
+          const identityDir = path.join(root, ...IDENTITY_DIR);
+          if (isInside(target.resolvedFile, identityDir)) {
+            const compositionDir = path.join(root, ...IDENTITY_COMPOSITION_DIR);
+            const importerIsTest = isTestFile(file);
+            if (FIXTURE_FILE.test(target.resolvedFile)) {
+              if (!importerIsTest && !FIXTURE_FILE.test(file)) {
+                violate(
+                  'identity/fixtures-import',
+                  rel(file),
+                  imp.line,
+                  `${rel(file)} is not a test file but imports the synthetic identity fixtures ("${imp.specifier}"). Fixtures are importable only from recognised test files; importing them from production code would put them into the build.`,
+                  {
+                    specifier: imp.specifier,
+                    from: pkg.name,
+                    hint: 'Use a recognised test file (*.test.ts, *.spec.ts, __tests__/), or build the principals at run time.',
+                  },
+                );
+              }
+            } else if (!isInside(file, compositionDir) && !importerIsTest) {
+              violate(
+                'identity/restricted-import',
+                rel(file),
+                imp.line,
+                `${rel(file)} is outside apps/api/src/composition/** and is not a recognised test file, but imports the synthetic identity module ("${imp.specifier}").`,
+                {
+                  specifier: imp.specifier,
+                  from: pkg.name,
+                  hint: 'Only composition code and recognised test files may import the issuer; Investigation sees only ActorHandle and ActorResolver.',
+                },
+              );
+            }
           }
         }
         if (target.compositionEntry && target.owner !== pkg) {
