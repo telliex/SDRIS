@@ -44,7 +44,6 @@ describe('actor resolver contract', () => {
 
   it('a resolver takes an unknown handle: the type system is not the trust decision', () => {
     const resolver: ActorResolver = { resolve: () => ({ status: 'invalid' }) };
-    const asUnknown: Parameters<ActorResolver['resolve']>[0] = { permissions: [] };
     assert.deepEqual(resolver.resolve({ permissions: ['investigation.read'] }), {
       status: 'invalid',
     });

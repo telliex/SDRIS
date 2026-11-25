@@ -223,9 +223,15 @@ test('the real Investigation composition entrypoint has a clean, fully typed sur
   assert.deepEqual(result.leaks, [], JSON.stringify(result.leaks, null, 2));
   assert.deepEqual(result.missingReturnTypes, []);
   assert.deepEqual(result.declarationLeaks, []);
+  // S0-06 WP-02 widened this list deliberately and additively: the internal resolver port and its outcome types
+  // (specification 2.4) are exported as types only, so the application's issuer can implement them without
+  // importing Investigation internals. They are not part of `src/public`.
   assert.deepEqual([...result.exports].sort(), [
+    'ActorResolution',
+    'ActorResolver',
     'InvestigationModule',
     'InvestigationModuleOptions',
+    'VerifiedActor',
     'createInvestigationModule',
   ]);
   assert.match(

@@ -10,7 +10,6 @@ import {
   type InvestigationService,
 } from '../application/investigation-service';
 export type {
-  ActorHandle,
   ActorResolution,
   ActorResolver,
   VerifiedActor,
