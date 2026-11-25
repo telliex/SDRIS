@@ -635,7 +635,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         [Number.NaN, 'not_a_safe_integer', 'number'],
         [Number.POSITIVE_INFINITY, 'not_a_safe_integer', 'number'],
         [2.5, 'not_a_safe_integer', 'number'],
-        [9007199254740993, 'not_a_safe_integer', 'number'],
+        [Number.MAX_SAFE_INTEGER + 1, 'not_a_safe_integer', 'number'],
         [0, 'out_of_range', 'number'],
         [-1, 'out_of_range', 'number'],
         [2147483648, 'out_of_range', 'number'],

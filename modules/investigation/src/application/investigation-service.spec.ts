@@ -437,7 +437,7 @@ describe('InvestigationService', () => {
       ['Infinity', Number.POSITIVE_INFINITY, 'not_a_safe_integer', 'number'],
       ['-Infinity', Number.NEGATIVE_INFINITY, 'not_a_safe_integer', 'number'],
       ['a fraction 2.5', 2.5, 'not_a_safe_integer', 'number'],
-      ['an unsafe integer', 9007199254740993, 'not_a_safe_integer', 'number'],
+      ['an unsafe integer', Number.MAX_SAFE_INTEGER + 1, 'not_a_safe_integer', 'number'],
       ['zero', 0, 'out_of_range', 'number'],
       ['negative zero', -0, 'out_of_range', 'number'],
       ['a negative number', -1, 'out_of_range', 'number'],
@@ -498,7 +498,7 @@ describe('InvestigationService', () => {
         [2.5, 'not_a_safe_integer', 'number'],
         [-1, 'out_of_range', 'number'],
         [2147483648, 'out_of_range', 'number'],
-        [9007199254740993, 'not_a_safe_integer', 'number'],
+        [Number.MAX_SAFE_INTEGER + 1, 'not_a_safe_integer', 'number'],
         ['secret-token-123', 'not_a_number', 'string'],
         [7n, 'not_a_number', 'bigint'],
       ];
