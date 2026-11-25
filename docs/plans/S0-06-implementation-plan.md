@@ -9,7 +9,7 @@
 
 ## 1. Start gate
 
-Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate (2026-11-24): CLOSED.** The decisions are recorded and A5 is ACCEPTED (Status commit `ee82f5f`), but the written implementation authorization and the Owner-approved integration SHA are still missing.
+Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate (2026-11-24): CLOSED.** The decisions are recorded and A5 is ACCEPTED (Status commit `ee82f5f`), but the written implementation authorization and the Owner-approved integration SHA are still missing. **Update (2026-11-24): the Owner approved integration SHA `08519a75ff62b981f8f01baf17f508f30568731f` (C14) and authorized WP-01 only; the gate is OPEN FOR WP-01 ONLY and remains closed for WP-02 to WP-06 (register, "C14 baseline and WP-01 authorization record").**
 
 ## 2. Dependencies and parallelism
 
