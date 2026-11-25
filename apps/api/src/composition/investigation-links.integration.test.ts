@@ -554,6 +554,72 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.deepEqual(await counts(), before);
       assert.equal(await caseVersion(c.id), 1);
     });
+
+    /**
+     * Characterisation (S0-06 WP-01, specification 7.2 and 7.5): these pass on the pre-FU-3 service and must still
+     * pass afterwards. The earlier checks keep their precedence over any `expectedVersion`, and the behaviour at the
+     * maximum stored version of a duplicate and of a stale request does not change.
+     */
+    it('characterisation: role, case, attempt and same-UUT errors win over any expectedVersion and write nothing', async () => {
+      const { c, a } = await scenario();
+      const foreign = await attempt(await uut());
+      const before = await counts();
+      for (const value of [99, Number.NaN, '3', undefined]) {
+        const expectedVersion = value as number;
+        const badRole = await service.linkAttempt({
+          caseId: c.id as never,
+          attemptId: a.id as never,
+          role: 'retest',
+          expectedVersion,
+        });
+        const noCase = await service.linkAttempt({
+          caseId: newEntityId<'InvestigationCase'>() as never,
+          attemptId: a.id as never,
+          role: 'RETEST',
+          expectedVersion,
+        });
+        const noAttempt = await service.linkAttempt({
+          caseId: c.id as never,
+          attemptId: newEntityId<'TestAttempt'>() as never,
+          role: 'RETEST',
+          expectedVersion,
+        });
+        const crossUut = await service.linkAttempt({
+          caseId: c.id as never,
+          attemptId: foreign.id as never,
+          role: 'RETEST',
+          expectedVersion,
+        });
+        assert.ok(!badRole.ok && badRole.error.code === 'investigation.invalid_link_role');
+        assert.ok(!noCase.ok && noCase.error.code === 'investigation.case_not_found');
+        assert.ok(!noAttempt.ok && noAttempt.error.code === 'investigation.attempt_not_found');
+        assert.ok(!crossUut.ok && crossUut.error.code === 'investigation.uut_mismatch');
+      }
+      assert.deepEqual(await counts(), before);
+      assert.equal(await caseVersion(c.id), 1);
+    });
+
+    it('characterisation: at the maximum stored version a matching duplicate is an idempotent success and a stale value is a service-shape conflict', async () => {
+      const { c, a } = await scenario();
+      assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
+      // Test-only SQL on the isolated database: place the case at the largest storable version.
+      await sql('update investigation.investigation_case set version = 2147483647 where id = $1', [
+        c.id,
+      ]);
+      const before = await counts();
+      const duplicate = await linkAt(2147483647, {
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+      });
+      assert.ok(duplicate.ok && !duplicate.value.created && duplicate.value.version === 2147483647);
+      const stale = await linkAt(2147483646, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+      assert.equal(stale.error.details?.expectedVersion, 2147483646);
+      assert.equal(stale.error.details?.actualVersion, 2147483647);
+      assert.deepEqual(await counts(), before);
+      assert.equal(await caseVersion(c.id), 2147483647);
+    });
   });
 
   describe('same-UUT protection', () => {

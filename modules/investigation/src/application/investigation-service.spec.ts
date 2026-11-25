@@ -311,4 +311,109 @@ describe('InvestigationService', () => {
       assert.equal((await service.getCase(c.id))?.links.length, 0);
     });
   });
+
+  /**
+   * Characterisation (S0-06 WP-01, specification 7.2 and 7.5). These pass on the pre-FU-3 service and must still pass
+   * after runtime `expectedVersion` validation and version exhaustion exist: the earlier checks keep their precedence,
+   * and the existing behaviour at the maximum version does not change.
+   */
+  describe('characterisation: precedence FU-3 must preserve', () => {
+    const MAX_VERSION = 2147483647;
+    const asVersion = (value: unknown) => value as number;
+    // A valid-but-stale number, and values that are not valid versions at all. The earlier checks must win over each.
+    const versions: Array<[string, unknown]> = [
+      ['a stale number', 99],
+      ['NaN', Number.NaN],
+      ['a numeric string', '3'],
+      ['an omitted value', undefined],
+    ];
+
+    for (const [label, value] of versions) {
+      it(`reports an unknown role before the version (${label})`, async () => {
+        const u = await uut();
+        const c = await open(u);
+        const a = await attemptOf(u);
+        const result = await service.linkAttempt({
+          caseId: c.id,
+          attemptId: a.id,
+          role: 'retest',
+          expectedVersion: asVersion(value),
+        });
+        assert.ok(!result.ok && result.error.code === 'investigation.invalid_link_role');
+        assert.equal(store.versions.get(c.id), 1);
+      });
+
+      it(`reports an unknown case before the version (${label})`, async () => {
+        const a = await attemptOf(await uut());
+        const result = await service.linkAttempt({
+          caseId: newEntityId<'InvestigationCase'>() as InvestigationCaseId,
+          attemptId: a.id,
+          role: 'CONTEXT',
+          expectedVersion: asVersion(value),
+        });
+        assert.ok(!result.ok && result.error.code === 'investigation.case_not_found');
+      });
+
+      it(`reports an unknown attempt before the version (${label})`, async () => {
+        const c = await open();
+        const result = await service.linkAttempt({
+          caseId: c.id,
+          attemptId: newEntityId<'TestAttempt'>() as TestAttemptId,
+          role: 'CONTEXT',
+          expectedVersion: asVersion(value),
+        });
+        assert.ok(!result.ok && result.error.code === 'investigation.attempt_not_found');
+      });
+
+      it(`reports a cross-UUT pair before the version (${label})`, async () => {
+        const c = await open();
+        const foreign = await attemptOf(await uut());
+        const result = await service.linkAttempt({
+          caseId: c.id,
+          attemptId: foreign.id,
+          role: 'SUPPORTING',
+          expectedVersion: asVersion(value),
+        });
+        assert.ok(!result.ok && result.error.code === 'investigation.uut_mismatch');
+        assert.equal(store.versions.get(c.id), 1);
+      });
+    }
+
+    it('at the maximum version a matching duplicate is still an idempotent success and a stale value is still a conflict', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      assert.ok(
+        (
+          await service.linkAttempt({
+            caseId: c.id,
+            attemptId: a.id,
+            role: 'RETEST',
+            expectedVersion: 1,
+          })
+        ).ok,
+      );
+      store.versions.set(c.id, MAX_VERSION); // test-only seeding of the stored version
+      const savesBefore = store.saves;
+      const duplicate = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: MAX_VERSION,
+      });
+      assert.ok(
+        duplicate.ok && !duplicate.value.created && duplicate.value.version === MAX_VERSION,
+      );
+      assert.equal(store.saves, savesBefore, 'nothing was saved');
+      const stale = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: MAX_VERSION - 1,
+      });
+      assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+      assert.equal(stale.error.details?.expectedVersion, MAX_VERSION - 1);
+      assert.equal(stale.error.details?.actualVersion, MAX_VERSION);
+    });
+  });
 });
