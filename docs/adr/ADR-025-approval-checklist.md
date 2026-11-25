@@ -354,6 +354,7 @@ Ratification"):**
   unchanged against `ae7dc51`.
 - _Independent verification status:_ **PENDING.** One consolidated independent verification of the G-2 adoption and this
   ratification is required before documentation integration resumes.
+  **Completed later: see the independent verification record in "Phase 0 - ADR governance G-2".**
 
 ---
 
@@ -507,6 +508,21 @@ affected governance and traceability references. 5. Create the required docs-onl
 **Execution attribution (G2-06).** Decision authority: Engineering Owner. Execution agent: Claude Code. Execution mode:
 Owner-authorized delegation. Reviewed baseline and execution baseline: as above. **Independent verification status: PENDING** (the
 executing agent's own checks are not independent verification).
+
+**Independent verification record (added after the verification; the PENDING statements above describe the state when this
+decision and the ratification were recorded).** Reviewer: Codex. Disposition: **READY TO RESUME DOCUMENTATION INTEGRATION**. Verified
+HEAD: `fca6038adaf64a99cca887da79d2516d5279463f`. Scope: the consolidated governance verification of the G-2 adoption (commit `26d06f5`), the A5 historical ratification
+(`59397ea`) and the editorial synchronization (`fca6038`), as requested in the verification prompt. Conclusions reported by the reviewer:
+(1) M1 validly adopts G-2 under the existing governance framework; (2) G-2 validly establishes a prospective procedural supersession
+limited to execution authority; (3) Path A validly ratifies the execution of the four named A5 lifecycle commits (`83da8a3`, `c3132f3`,
+`ee82f5f`, `1a23a0c`); (4) decision authority and execution attribution are accurate; (5) the approved technical contracts and the
+original commit identities are intact; (6) the three commits stay within the Owner-authorized scope; (7) documentation integration may
+resume, with no additional ADR and no personal Owner re-execution required for this transaction. Results reported by the reviewer:
+workspace structure PASS; 261 bootstrap and architecture tests passed, 0 failed; tracked Markdown formatting PASS; Git diff checks
+against both baselines PASS; the only broader formatting warning is the untracked reference report; implementation and runtime
+verification NOT_RUN. This record was supplied to the executing agent in the Owner's instruction and is recorded here as reported; no
+reviewer signature, timestamp or report location is stated, and none is invented. **The reviewer did not review the commit that
+records this verification result.** Implementation authorization remains CLOSED and S0-06 NOT STARTED.
 
 ### Phase 1 - record the Owner's decisions (all five, before any Status commit)
 
