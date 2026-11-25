@@ -23,6 +23,7 @@ Acceptance and closure are **pending** (see section 7), and ADR-025 and A1 to A4
 | 6   | S0-05 Domain Specification                                             | APPROVED WITH CHANGES (Owner, [final approval v1.0](../specs/S0-05-final-owner-approval.md)) | [specification](../specs/S0-05-investigation-aggregate-foundation.md)       |
 | 7   | S0-05 Architecture Acceptance record                                   | DRAFT, pending Owner sign-off                                                                | [acceptance record](../specs/S0-05-architecture-acceptance.md)              |
 | 8   | S0-05 Closure record                                                   | DRAFT, closure pending                                                                       | [closure record](../specs/S0-05-closure-record.md)                          |
+| 9   | Amendment A5 — Investigation-owned audit persistence (S0-06)           | ACCEPTED                                                                                     | same file, "Proposed Amendment A5"                                          |
 
 ADR-024 is outside this checklist (also PROPOSED). Supporting documents: the
 [gap analysis](../specs/S0-05-gap-analysis.md), the
@@ -267,6 +268,96 @@ Status commit (subject `docs(adr): accept <record>`; its SHA is added by the ste
 
 ---
 
+## 5A. Amendment A5 — Investigation-owned audit persistence (S0-06)
+
+Commits: `7989422` (ADR text, drafted as PROPOSED for S0-06). The amendment text is frozen from the first Status change of its record.
+
+| Item                                                                                                                                                                                  | Evidence                                                                                      | Owner confirms |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------- |
+| Ownership: the Investigation context owns its audit writer, port, adapter and audit table; no shared Audit Context, package or cross-context audit table                              | A5 rule 1; [S0-06 specification](../specs/S0-06-authentication-audit-foundation.md) section 4 | ☐              |
+| Schema: the audit table lives in PostgreSQL schema `investigation`; columns, actions and details are defined by the approved S0-06 specification                                      | A5 rule 2; specification 4                                                                    | ☐              |
+| Committed state changes only: exactly one authoritative record per committed change; no-ops, validation, conflict, authentication or authorization failures and rollbacks create none | A5 rule 3; specification 5                                                                    | ☐              |
+| Same transaction through the Investigation-owned `TransactionScope` and the `PersistenceHandle` adapter; a missing or invalid token is an error                                       | A5 rule 4; specification 4.2 and its rollback verifications (S0-06 WP-04, WP-05, NOT_RUN)     | ☐              |
+| Fail closed once audit is mandatory                                                                                                                                                   | A5 rule 5; specification 6                                                                    | ☐              |
+| Append-only at the database level; role separation and tamper-evidence stay production obligations (OBL-AUD-1)                                                                        | A5 rule 6; specification 4.7                                                                  | ☐              |
+| No change to the A1 or A2 allowlists; everything listed under "Remains deferred" stays deferred; Decision 7 text unchanged                                                            | A5 rule 7 and its deferral list                                                               | ☐              |
+
+**Open points / trade-offs:** fail-closed audit makes the audit table a hard availability dependency; the append-only guard binds application defects, not a privileged database role; production role separation, DDL restriction, tamper-evidence, retention and the Security Log retention disposition stay open obligations; all S0-06 runtime evidence is NOT_RUN.
+
+**Sign-off**
+
+Decision: ☑ APPROVED ☐ APPROVED WITH CHANGES ☐ REJECTED
+
+Changes required: none (no change to the record's text is required).
+
+Conditions and notes recorded by the Owner (non-text):
+
+- C13 remains mandatory: no alternative to A5 exists.
+- A5 does not expand beyond the approved Investigation audit scope and keeps every existing deferral.
+- A5 is not effective before its Status commit; approval of A5 does not authorize S0-06 implementation, and implementation authorization remains CLOSED.
+
+Owner statement, quoted from the project conversation of 2026-11-24 (instruction "SDRIS S0-06 — Formal Engineering Owner Approval and ADR Acceptance"; reviewed HEAD `a83406987d336fd6767ca00dcd432198572acedb`):
+
+> D5 — APPROVED: Audit Ownership and ADR-025 A5
+> Approve Investigation-owned audit persistence in the investigation PostgreSQL schema.
+> Approve the reviewed ADR-025 Amendment A5 through the existing ADR lifecycle.
+> C13 remains mandatory.
+
+Approver (Engineering Owner): Engineering Owner, by explicit instruction in the project conversation (recorded by Claude Code). Date: 2026-11-24. Recorded in (link or commit): this checklist, section 5A; commit `docs(adr): record the Owner decision on A5`. The S0-06 decisions D1 to D9 are recorded in the [S0-06 decision register](../specs/S0-06-owner-decision-register.md), section 6.1.
+
+This records the decision only: A5 stays PROPOSED until its Status commit (Approval workflow, Phase 3). No effective-policy record exists yet.
+
+Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): `ee82f5f284827d20c9dd14326c99ca4eeee09de7`
+
+**Historical ratification of the A5 lifecycle execution (ADR governance G-2, decision GD-3).** Added by a later commit; the
+statements above are unchanged and remain the record of what happened when.
+
+_What happened, stated without softening._ The four lifecycle commits below were **executed by Claude Code**, under the Owner's
+written instruction of 2026-11-24 ("SDRIS S0-06 — Formal Engineering Owner Approval and ADR Acceptance"), **while ADR governance G-2 was
+not in force**. At that time the README said "Only the Engineering Owner changes `PROPOSED` to `ACCEPTED`" and A5's Approval bullet
+said "Claude Code does not perform these steps". The commits carry the Owner's configured Git identity and a Claude co-author
+trailer; Git identity is not evidence of who executed them. **They are not described here as having been compliant when executed.**
+The procedural deviation is part of the record.
+
+| Commit    | Operation                                                                | Executed by                                     |
+| --------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `83da8a3` | A5 decision recorded in this checklist (section 5A)                      | Claude Code, on the Owner's written instruction |
+| `c3132f3` | A5 effective-policy section appended                                     | Claude Code, on the Owner's written instruction |
+| `ee82f5f` | A5 Status transition (`PROPOSED` to `ACCEPTED`) and its checklist mirror | Claude Code, on the Owner's written instruction |
+| `1a23a0c` | Status commit SHA backfill (step 4)                                      | Claude Code, on the Owner's written instruction |
+
+**Owner decision (quoted from the Owner's written instruction of 2026-11-24, "SDRIS — G-2 Governance Adoption and A5 Historical
+Ratification"):**
+
+> GD-3 — A5 Historical Ratification: APPROVED PATH A. The Engineering Owner expressly ratifies the execution procedure of the
+> following four commits, subject to a valid governance and ratification mechanism: 83da8a3 — A5 approval checklist. c3132f3 — A5
+> effective policy. ee82f5f — A5 Status transition. 1a23a0c — A5 Status SHA backfill. Original reviewed HEAD:
+> a83406987d336fd6767ca00dcd432198572acedb. The substantive approval of D1–D9 and A5 remains unchanged. This ratification applies
+> only to the four named commits and their execution procedure. It does not extend to any other historical operation. Preserve the
+> original commit identities if valid ratification is available.
+
+**Record of the ratification:**
+
+- _Original substantive approval:_ Engineering Owner, 2026-11-24, against reviewed HEAD `a83406987d336fd6767ca00dcd432198572acedb` (unchanged; not
+  re-dated). _Ratification and G-2 decision date:_ 2026-11-24, later in the same conversation; neither is back-dated.
+- _Scope:_ the **execution procedure of the four named commits only**. It does not extend to any other operation, changes no A5
+  rule, and does not authorize implementation, merge or any expansion of A5's scope.
+- _Governance basis:_ a separate, explicit and bounded Owner decision of the kind G2-10 requires, taken by the authority over both
+  the README conventions and the A5 record, after ADR governance G-2 was adopted by commit `26d06f5` ("docs(adr): record G-2
+  delegated execution governance decision"; the adoption basis and its stated limit are in Phase 0 - ADR governance G-2). G-2 itself
+  does not legitimize these commits; this decision does. Commit identities are preserved, with no revert and no re-execution.
+- _Historical execution actor:_ Claude Code. _Execution agent recording this ratification:_ Claude Code (Claude Sonnet 5.5), under
+  the GD-4 authorization, execution-start HEAD `e7e6c820b602b63e199c027819fc2d66a3528fa6`. Decision authority: Engineering Owner.
+- _Content checks made by the executing agent (not independent verification):_ `ee82f5f` changed only the A5 Status line and this
+  checklist's row 9 mirror; the A5 text differs from the draft `7989422` only on that Status line; `1a23a0c` records the full SHA of
+  `ee82f5f`; the effective-policy A5 section restates the seven A5 Rules without adding a rule; Decision 7 and A1 to A4 are
+  unchanged against `ae7dc51`.
+- _Independent verification status:_ **PENDING.** One consolidated independent verification of the G-2 adoption and this
+  ratification is required before documentation integration resumes.
+  **Completed later: see the independent verification record in "Phase 0 - ADR governance G-2".**
+
+---
+
 ## 6. S0-05 Domain Specification
 
 Commit: `0252689`. **The Engineering Owner approved this specification WITH CHANGES** (Q1) in the
@@ -360,6 +451,79 @@ decision text, and a substantive change needs a new amendment or a superseding A
 README by the commit `docs(adr): record G-1 amendment lifecycle interpretation`. G-1 therefore no longer blocks effective-policy
 or Status commits; the prerequisites of Phase 1 and Phase 2 still apply.
 
+### Phase 0 - ADR governance G-2: Owner-authorized delegated execution (adopted)
+
+"ADR governance G-2" (not the S0-06 review gap G-2). **Decision authority:** Engineering Owner. **Recorded:** 2026-11-24, by Claude Code
+under the Owner's written authorization below. The ten principles (G2-01 to G2-10) are recorded in the [ADR README](README.md).
+
+**Owner decisions (quoted from the Owner's written instruction of 2026-11-24, "SDRIS — G-2 Governance Adoption and A5 Historical
+Ratification", issued against execution-start HEAD `e7e6c820b602b63e199c027819fc2d66a3528fa6`):**
+
+> GD-1 — G-2 Delegated Execution: APPROVED. Adopt ADR governance G-2 — Owner-authorized Delegated Execution. The Engineering Owner
+> retains exclusive decision and approval authority. Claude Code may execute mechanical governance operations under explicit,
+> bounded and recorded Owner authorization. Delegation transfers execution authority, never decision authority.
+>
+> GD-2 — Adoption Mechanism and Policy Precedence: APPROVED M1. Adopt G-2 through the existing G-1 governance mechanism: ADR README
+> conventions; Approval checklist Phase 0; Recorded Engineering Owner decision and authorization; Existing decision-package
+> references where required. Subject to valid adoption under the existing governance framework, G-2 expressly supersedes
+> conflicting earlier procedural requirements concerning who may execute ADR lifecycle operations. This supersession is limited to
+> execution authority. It does not modify any substantive architecture decision, rule, constraint, rationale or technical
+> contract. Preserve historical ADR wording, including A5's original procedural sentence. Do not rely on an informal
+> reinterpretation of the original sentence.
+
+GD-3 (the A5 historical ratification) is a separate decision, recorded in section 5A. GD-4 is the execution authorization below.
+
+**Adoption basis (the authority arises from the existing framework and the Owner's decision, not from G-2 itself):**
+
+1. _Decision authority._ Governance changes are reserved to the Engineering Owner: [AGENTS.md](../../AGENTS.md) sections 2 and 15,
+   CLAUDE.md section 1 ("not authorized to independently change fundamental SDRIS architecture or domain governance rules"), and
+   the README rule that only the Owner decides ADR acceptance. The decision is the Owner's explicit written decision above.
+2. _Mechanism._ M1 is the mechanism by which G-1 was adopted (an Owner decision recorded in the README conventions, a Phase 0
+   entry here and the decision package, [decision package](ADR-025-decision-package.md) sections 10.3 and 11).
+3. _Recording by an agent._ No document excludes an agent from recording an Owner governance decision in the README or this
+   checklist. The A5 sentence "Claude Code does not perform these steps" concerns A5's approval, effective-policy and Status
+   steps, and the G-1 decision was recorded by an agent-made commit on the same pattern. Claude Code records this decision only
+   because the Owner explicitly instructed it to (CLAUDE.md section 1 is therefore respected).
+4. _Limited supersession._ The decision does not edit A5 or any accepted ADR text (README: "Do not edit an accepted ADR in place");
+   it states who may **execute**, prospectively, and leaves every architectural rule untouched. **Stated limit:** no repository
+   document defines precedence between an Owner governance decision recorded in the README and a frozen amendment's procedural
+   sentence; this decision is the Owner's resolution of that point, made as the authority over both, and it is submitted to the
+   consolidated independent verification below instead of being treated as self-evident.
+5. _Prospective only._ Adoption validates no earlier operation (G2-10); see section 5A for the separate ratification.
+
+**Execution authorization (GD-4 in the Owner's words: "Claude Code is authorized to: 1. Adopt G-2 through M1. 2. Record the approved
+A5 historical ratification through Path A. 3. Complete the three previously identified editorial corrections. 4. Synchronize directly
+affected governance and traceability references. 5. Create the required docs-only commits. 6. Run existing verification checks. 7. Prepare one consolidated independent Codex verification handoff."), recorded in the G2-03 format:**
+
+| Field                                       | Value                                                                                                                                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner decision and statement                | GD-1 to GD-4, quoted above and in section 5A                                                                                                                                                                                           |
+| Target record or task                       | ADR governance G-2 adoption; A5 historical ratification (section 5A); three editorial corrections                                                                                                                                      |
+| Authorized executor                         | Claude Code (Claude Sonnet 5.5)                                                                                                                                                                                                        |
+| Permitted operations                        | The seven operations listed in GD-4; docs-only commits staged by explicit path                                                                                                                                                         |
+| Reviewed content SHA / execution-start HEAD | `a83406987d336fd6767ca00dcd432198572acedb` / `e7e6c820b602b63e199c027819fc2d66a3528fa6`                                                                                                                                                |
+| Exclusions                                  | Merge, squash, rebase, force push, fetch, push and PR during this phase, architecture contract changes, implementation, deployment, edits to A5 or any accepted ADR text, edits to AGENTS.md or CLAUDE.md, the suspended Owner runbook |
+| Completion and verification                 | Documentation commits only; existing checks run; one consolidated independent verification (Codex) before documentation integration resumes                                                                                            |
+
+**Execution attribution (G2-06).** Decision authority: Engineering Owner. Execution agent: Claude Code. Execution mode:
+Owner-authorized delegation. Reviewed baseline and execution baseline: as above. **Independent verification status: PENDING** (the
+executing agent's own checks are not independent verification).
+
+**Independent verification record (added after the verification; the PENDING statements above describe the state when this
+decision and the ratification were recorded).** Reviewer: Codex. Disposition: **READY TO RESUME DOCUMENTATION INTEGRATION**. Verified
+HEAD: `fca6038adaf64a99cca887da79d2516d5279463f`. Scope: the consolidated governance verification of the G-2 adoption (commit `26d06f5`), the A5 historical ratification
+(`59397ea`) and the editorial synchronization (`fca6038`), as requested in the verification prompt. Conclusions reported by the reviewer:
+(1) M1 validly adopts G-2 under the existing governance framework; (2) G-2 validly establishes a prospective procedural supersession
+limited to execution authority; (3) Path A validly ratifies the execution of the four named A5 lifecycle commits (`83da8a3`, `c3132f3`,
+`ee82f5f`, `1a23a0c`); (4) decision authority and execution attribution are accurate; (5) the approved technical contracts and the
+original commit identities are intact; (6) the three commits stay within the Owner-authorized scope; (7) documentation integration may
+resume, with no additional ADR and no personal Owner re-execution required for this transaction. Results reported by the reviewer:
+workspace structure PASS; 261 bootstrap and architecture tests passed, 0 failed; tracked Markdown formatting PASS; Git diff checks
+against both baselines PASS; the only broader formatting warning is the untracked reference report; implementation and runtime
+verification NOT_RUN. This record was supplied to the executing agent in the Owner's instruction and is recorded here as reported; no
+reviewer signature, timestamp or report location is stated, and none is invented. **The reviewer did not review the commit that
+records this verification result.** Implementation authorization remains CLOSED and S0-06 NOT STARTED.
+
 ### Phase 1 - record the Owner's decisions (all five, before any Status commit)
 
 For each record R, one commit `docs(adr): record the Owner decision on <R>`, touching only R's sign-off block in this checklist,
@@ -424,3 +588,8 @@ change applied, before the first Status commit.**
    fails, stop and report the issue; do not skip, reorder or automatically repair the sequence. This rule does not change the
    approval dependencies of ADR-025, A3 or A4. The effective-policy commits of A1 and A2 (step 2) are already made and are not part
    of the batch.
+
+8. **Execution of the mechanical steps (ADR governance G-2).** The Owner decides; the Phase 1 recording and the Phase 3 steps are
+   executed either by the Owner personally or, prospectively, by an agent under a recorded Owner authorization in the G2-03 format
+   (see "Phase 0 - ADR governance G-2" and the [ADR README](README.md)). An agent never decides, and the independent verification of
+   G2-07 applies to each material bounded governance transaction. This rule changes no order or content of the steps above.
