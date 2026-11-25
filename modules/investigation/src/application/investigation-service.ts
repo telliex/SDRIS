@@ -34,13 +34,48 @@ export type NotFoundErrorCode =
 
 /**
  * Every operational error the service can return as a value (never thrown). Documented in section 12 of the
- * S0-05 specification. Unexpected failures (a lost connection, a bug) are thrown, not returned.
+ * S0-05 specification, extended by S0-06 FU-3 (specification 7): `investigation.invalid_expected_version` (the caller's
+ * `expectedVersion` is not a native safe integer from 1 to 2147483647) and `investigation.version_exhausted` (a new
+ * link needs a version past 2147483647). `investigation.concurrency_conflict` has two shapes, both unchanged: from the
+ * service's version comparison `details` is `{ expectedVersion, actualVersion }`; from the repository's atomic
+ * compare-and-save race it is `{ expectedVersion }` only, so a consumer must not assume `actualVersion` is present.
+ * Unexpected failures (a lost connection, a bug) are thrown, not returned.
  */
 export type InvestigationServiceError =
   | InvestigationDomainError
   | InvalidTestStageError
+  | InvalidExpectedVersionError
+  | VersionExhaustedError
   | RepositoryError
   | SdrisError<NotFoundErrorCode, { readonly actual: string }>;
+
+/** Smallest and largest case version a caller may name: the PostgreSQL `integer` column starts at 1 (S0-06 FU-3). */
+const MIN_EXPECTED_VERSION = 1;
+const MAX_EXPECTED_VERSION = 2147483647;
+
+/**
+ * `linkAttempt` received an `expectedVersion` that is not a native safe integer from 1 to 2147483647 (S0-06 FU-3,
+ * specification 7.4.2). Returned as a value. `details` carries only these four keys: the raw input is never echoed,
+ * including finite numbers (Owner direction C12); `actualType` is the `typeof` tag, with `null` reported as `'null'`.
+ */
+export type InvalidExpectedVersionError = SdrisError<
+  'investigation.invalid_expected_version',
+  {
+    readonly reason: 'not_a_number' | 'not_a_safe_integer' | 'out_of_range';
+    readonly minimum: 1;
+    readonly maximum: 2147483647;
+    readonly actualType:
+      | 'number'
+      | 'string'
+      | 'bigint'
+      | 'boolean'
+      | 'object'
+      | 'undefined'
+      | 'symbol'
+      | 'function'
+      | 'null';
+  }
+>;
 
 export interface LinkResult {
   /** The case version after the operation. Unchanged for an idempotent duplicate. */
@@ -75,13 +110,19 @@ export interface InvestigationService {
    * Links an attempt to a case under the given role, for a caller that last saw the case at `expectedVersion`
    * (Owner decision Q6, mandatory). In this order:
    *
-   * 1. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
+   * 1. the role must be in the vocabulary (`invalid_link_role`);
+   * 2. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
    *    `uut_mismatch`);
-   * 2. the authoritative version is compared with `expectedVersion`; a difference is a `concurrency_conflict`, **even
+   * 3. `expectedVersion` is validated at runtime, with no coercion: only a native safe integer from 1 to 2147483647 is
+   *    accepted (`invalid_expected_version`; its `details` never contain the raw input);
+   * 4. the authoritative version is compared with `expectedVersion`; a difference is a `concurrency_conflict`, **even
    *    when the identical link already exists** (Expected Version takes precedence over idempotency);
-   * 3. when the versions match and the identical (case, attempt, role) link exists, the existing link is returned and
-   *    nothing is written (`created: false`, version unchanged);
-   * 4. when the versions match and the link is new, it is stored and the version is incremented atomically.
+   * 5. when the versions match and the identical (case, attempt, role) link exists, the existing link is returned and
+   *    nothing is written (`created: false`, version unchanged), also at the largest version;
+   * 6. when the versions match and the link is new but the case is already at 2147483647, nothing is written
+   *    (`version_exhausted`);
+   * 7. otherwise the link is stored and the version is incremented atomically; a concurrent writer that wins the
+   *    atomic update makes this one a `concurrency_conflict` (repository shape, no `actualVersion`).
    *
    * The service never retries: after a conflict the caller re-reads the case and decides again. The same attempt with
    * another role is another link.
@@ -91,7 +132,10 @@ export interface InvestigationService {
     readonly attemptId: TestAttemptId;
     /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
     readonly role: string;
-    /** The case version the caller based this request on. Required. */
+    /**
+     * The case version the caller based this request on. Required. Validated at runtime: a JavaScript caller that
+     * omits it or sends anything but a native safe integer from 1 to 2147483647 gets `invalid_expected_version`.
+     */
     readonly expectedVersion: number;
   }): Promise<Result<LinkResult, InvestigationServiceError>>;
 }
@@ -108,6 +152,40 @@ class Rollback extends Error {
   constructor(readonly failure: InvestigationServiceError) {
     super(failure.code);
   }
+}
+
+/**
+ * A new link needs `version + 1` but the case is already at the largest storable version (S0-06 FU-3, specification
+ * 7.4.3). Returned as a value, before any write, so the repository never evaluates an increment past the `integer`
+ * maximum. A matching duplicate (no increment) and a stale request (a conflict) never produce it.
+ */
+export type VersionExhaustedError = SdrisError<
+  'investigation.version_exhausted',
+  { readonly actualVersion: 2147483647; readonly maximumVersion: 2147483647 }
+>;
+
+/**
+ * Runtime validation of the caller's `expectedVersion` (the type system does not protect a JavaScript caller). No
+ * coercion: only a native number that is a safe integer in [1, 2147483647] is valid. The reason is evaluated in order:
+ * not a number, then not a safe integer (NaN, infinities, fractions, unsafe integers), then out of range.
+ */
+function validateExpectedVersion(value: unknown): InvalidExpectedVersionError | undefined {
+  const actualType = value === null ? 'null' : typeof value;
+  const reject = (reason: NonNullable<InvalidExpectedVersionError['details']>['reason']) =>
+    createError({
+      code: 'investigation.invalid_expected_version' as const,
+      message: 'expectedVersion must be an integer from 1 to 2147483647.',
+      details: {
+        reason,
+        minimum: MIN_EXPECTED_VERSION,
+        maximum: MAX_EXPECTED_VERSION,
+        actualType,
+      } as const,
+    });
+  if (typeof value !== 'number') return reject('not_a_number');
+  if (!Number.isSafeInteger(value)) return reject('not_a_safe_integer');
+  if (value < MIN_EXPECTED_VERSION || value > MAX_EXPECTED_VERSION) return reject('out_of_range');
+  return undefined;
 }
 
 function notFound(code: NotFoundErrorCode, what: string, id: string) {
@@ -204,14 +282,20 @@ export function createInvestigationService(
         }
         const outcome = linkTestAttempt(current, attempt, role.value, deps.now());
         if (!outcome.ok) return err(outcome.error);
+        // FU-3 step 5: runtime validation, after existence and same-UUT, before the version comparison.
+        // Read once: a JavaScript accessor can answer differently on each read, so the value that is validated is the
+        // value that is compared and reported.
+        const expectedVersion = command.expectedVersion;
+        const invalid = validateExpectedVersion(expectedVersion);
+        if (invalid) return err(invalid);
         // Expected Version takes precedence over duplicate-link idempotency (Owner decision Q6).
-        if (current.version !== command.expectedVersion) {
+        if (current.version !== expectedVersion) {
           return err(
             createError({
               code: 'investigation.concurrency_conflict' as const,
               message:
                 'The case is not at the version the request was based on; re-read the case and decide again.',
-              details: { expectedVersion: command.expectedVersion, actualVersion: current.version },
+              details: { expectedVersion, actualVersion: current.version },
             }),
           );
         }
@@ -222,6 +306,20 @@ export function createInvestigationService(
             link: outcome.value.link,
             created: false,
           });
+        }
+        // FU-3 step 8: a new link needs version + 1. At the largest storable version that is refused explicitly,
+        // before any write; the column stays `integer` (C9).
+        if (current.version >= MAX_EXPECTED_VERSION) {
+          return err(
+            createError({
+              code: 'investigation.version_exhausted' as const,
+              message: 'The case is at the largest storable version; no further link can be added.',
+              details: {
+                actualVersion: MAX_EXPECTED_VERSION,
+                maximumVersion: MAX_EXPECTED_VERSION,
+              } as const,
+            }),
+          );
         }
         const saved = await deps.repository.save(outcome.value.investigationCase, tx);
         return saved.ok

@@ -9,7 +9,7 @@
 
 ## 1. Start gate
 
-Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate (2026-11-24): CLOSED.** The decisions are recorded and A5 is ACCEPTED (Status commit `ee82f5f`), but the written implementation authorization and the Owner-approved integration SHA are still missing.
+Open only when register section 8 holds: D1 to D8 recorded, D9 requirements approved, written authorisation to implement, Amendment A5 ACCEPTED through the existing ADR workflow for WP-04 and WP-05 (there is no alternative), and a clean branch cut from the **Owner-approved integration SHA**, which the written authorization names. **Gate (2026-11-24): CLOSED.** The decisions are recorded and A5 is ACCEPTED (Status commit `ee82f5f`), but the written implementation authorization and the Owner-approved integration SHA are still missing. **Update (2026-11-24): the Owner approved integration SHA `08519a75ff62b981f8f01baf17f508f30568731f` (C14) and authorized WP-01 only; the gate is OPEN FOR WP-01 ONLY and remains closed for WP-02 to WP-06 (register, "C14 baseline and WP-01 authorization record").**
 
 ## 2. Dependencies and parallelism
 
@@ -48,6 +48,7 @@ Defined now, approved by the Owner with D9, and applied to **every** package as 
 - **Exit evidence:** the compatibility inventory (specification 7.6) re-verified against the code at the integration base; Owner review of the contract before WP-03 starts.
 - **Risks:** widened exported union; a hidden dependency on non-validation (none found in the repository).
 - **Rollback:** revert the commits; no schema or data change exists, so rollback is complete.
+- **Status (2026-11-25):** implemented (PR #10), independently reviewed (initial REVISE at `a08c7d9`, correction `0c1962fb281104c1836fbbfc5cbe18f8771cacde`, focused re-review READY FOR OWNER ACCEPTANCE) and accepted by the Owner; FU-3 formally closed effective on integration; WP-01 implementation authorization CLOSED; WP-02 to WP-06 NOT AUTHORIZED. See the register, "WP-01 acceptance and FU-3 closure record".
 - **Commits:** (1) `test(investigation): characterise linkAttempt error precedence` (2) `feat(investigation): validate expectedVersion at the comparison position` (3) `feat(investigation): fail explicitly at version exhaustion` (4) `docs(investigation): update the linkAttempt and error-union contract comments`.
 
 ### WP-02 — Synthetic identity and trusted actor handle
