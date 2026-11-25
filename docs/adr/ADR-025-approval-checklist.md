@@ -309,6 +309,52 @@ This records the decision only: A5 stays PROPOSED until its Status commit (Appro
 
 Status commit (subject `docs(adr): accept <record>`; its SHA is added by the step 4 commit): `ee82f5f284827d20c9dd14326c99ca4eeee09de7`
 
+**Historical ratification of the A5 lifecycle execution (ADR governance G-2, decision GD-3).** Added by a later commit; the
+statements above are unchanged and remain the record of what happened when.
+
+_What happened, stated without softening._ The four lifecycle commits below were **executed by Claude Code**, under the Owner's
+written instruction of 2026-11-24 ("SDRIS S0-06 — Formal Engineering Owner Approval and ADR Acceptance"), **while ADR governance G-2 was
+not in force**. At that time the README said "Only the Engineering Owner changes `PROPOSED` to `ACCEPTED`" and A5's Approval bullet
+said "Claude Code does not perform these steps". The commits carry the Owner's configured Git identity and a Claude co-author
+trailer; Git identity is not evidence of who executed them. **They are not described here as having been compliant when executed.**
+The procedural deviation is part of the record.
+
+| Commit    | Operation                                                                | Executed by                                     |
+| --------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `83da8a3` | A5 decision recorded in this checklist (section 5A)                      | Claude Code, on the Owner's written instruction |
+| `c3132f3` | A5 effective-policy section appended                                     | Claude Code, on the Owner's written instruction |
+| `ee82f5f` | A5 Status transition (`PROPOSED` to `ACCEPTED`) and its checklist mirror | Claude Code, on the Owner's written instruction |
+| `1a23a0c` | Status commit SHA backfill (step 4)                                      | Claude Code, on the Owner's written instruction |
+
+**Owner decision (quoted from the Owner's written instruction of 2026-11-24, "SDRIS — G-2 Governance Adoption and A5 Historical
+Ratification"):**
+
+> GD-3 — A5 Historical Ratification: APPROVED PATH A. The Engineering Owner expressly ratifies the execution procedure of the
+> following four commits, subject to a valid governance and ratification mechanism: 83da8a3 — A5 approval checklist. c3132f3 — A5
+> effective policy. ee82f5f — A5 Status transition. 1a23a0c — A5 Status SHA backfill. Original reviewed HEAD:
+> a83406987d336fd6767ca00dcd432198572acedb. The substantive approval of D1–D9 and A5 remains unchanged. This ratification applies
+> only to the four named commits and their execution procedure. It does not extend to any other historical operation. Preserve the
+> original commit identities if valid ratification is available.
+
+**Record of the ratification:**
+
+- _Original substantive approval:_ Engineering Owner, 2026-11-24, against reviewed HEAD `a83406987d336fd6767ca00dcd432198572acedb` (unchanged; not
+  re-dated). _Ratification and G-2 decision date:_ 2026-11-24, later in the same conversation; neither is back-dated.
+- _Scope:_ the **execution procedure of the four named commits only**. It does not extend to any other operation, changes no A5
+  rule, and does not authorize implementation, merge or any expansion of A5's scope.
+- _Governance basis:_ a separate, explicit and bounded Owner decision of the kind G2-10 requires, taken by the authority over both
+  the README conventions and the A5 record, after ADR governance G-2 was adopted by commit `26d06f5` ("docs(adr): record G-2
+  delegated execution governance decision"; the adoption basis and its stated limit are in Phase 0 - ADR governance G-2). G-2 itself
+  does not legitimize these commits; this decision does. Commit identities are preserved, with no revert and no re-execution.
+- _Historical execution actor:_ Claude Code. _Execution agent recording this ratification:_ Claude Code (Claude Sonnet 5.5), under
+  the GD-4 authorization, execution-start HEAD `e7e6c820b602b63e199c027819fc2d66a3528fa6`. Decision authority: Engineering Owner.
+- _Content checks made by the executing agent (not independent verification):_ `ee82f5f` changed only the A5 Status line and this
+  checklist's row 9 mirror; the A5 text differs from the draft `7989422` only on that Status line; `1a23a0c` records the full SHA of
+  `ee82f5f`; the effective-policy A5 section restates the seven A5 Rules without adding a rule; Decision 7 and A1 to A4 are
+  unchanged against `ae7dc51`.
+- _Independent verification status:_ **PENDING.** One consolidated independent verification of the G-2 adoption and this
+  ratification is required before documentation integration resumes.
+
 ---
 
 ## 6. S0-05 Domain Specification
