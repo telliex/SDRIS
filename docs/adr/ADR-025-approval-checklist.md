@@ -404,6 +404,64 @@ decision text, and a substantive change needs a new amendment or a superseding A
 README by the commit `docs(adr): record G-1 amendment lifecycle interpretation`. G-1 therefore no longer blocks effective-policy
 or Status commits; the prerequisites of Phase 1 and Phase 2 still apply.
 
+### Phase 0 - ADR governance G-2: Owner-authorized delegated execution (adopted)
+
+"ADR governance G-2" (not the S0-06 review gap G-2). **Decision authority:** Engineering Owner. **Recorded:** 2026-11-24, by Claude Code
+under the Owner's written authorization below. The ten principles (G2-01 to G2-10) are recorded in the [ADR README](README.md).
+
+**Owner decisions (quoted from the Owner's written instruction of 2026-11-24, "SDRIS — G-2 Governance Adoption and A5 Historical
+Ratification", issued against execution-start HEAD `e7e6c820b602b63e199c027819fc2d66a3528fa6`):**
+
+> GD-1 — G-2 Delegated Execution: APPROVED. Adopt ADR governance G-2 — Owner-authorized Delegated Execution. The Engineering Owner
+> retains exclusive decision and approval authority. Claude Code may execute mechanical governance operations under explicit,
+> bounded and recorded Owner authorization. Delegation transfers execution authority, never decision authority.
+>
+> GD-2 — Adoption Mechanism and Policy Precedence: APPROVED M1. Adopt G-2 through the existing G-1 governance mechanism: ADR README
+> conventions; Approval checklist Phase 0; Recorded Engineering Owner decision and authorization; Existing decision-package
+> references where required. Subject to valid adoption under the existing governance framework, G-2 expressly supersedes
+> conflicting earlier procedural requirements concerning who may execute ADR lifecycle operations. This supersession is limited to
+> execution authority. It does not modify any substantive architecture decision, rule, constraint, rationale or technical
+> contract. Preserve historical ADR wording, including A5's original procedural sentence. Do not rely on an informal
+> reinterpretation of the original sentence.
+
+GD-3 (the A5 historical ratification) is a separate decision, recorded in section 5A. GD-4 is the execution authorization below.
+
+**Adoption basis (the authority arises from the existing framework and the Owner's decision, not from G-2 itself):**
+
+1. _Decision authority._ Governance changes are reserved to the Engineering Owner: [AGENTS.md](../../AGENTS.md) sections 2 and 15,
+   CLAUDE.md section 1 ("not authorized to independently change fundamental SDRIS architecture or domain governance rules"), and
+   the README rule that only the Owner decides ADR acceptance. The decision is the Owner's explicit written decision above.
+2. _Mechanism._ M1 is the mechanism by which G-1 was adopted (an Owner decision recorded in the README conventions, a Phase 0
+   entry here and the decision package, [decision package](ADR-025-decision-package.md) sections 10.3 and 11).
+3. _Recording by an agent._ No document excludes an agent from recording an Owner governance decision in the README or this
+   checklist. The A5 sentence "Claude Code does not perform these steps" concerns A5's approval, effective-policy and Status
+   steps, and the G-1 decision was recorded by an agent-made commit on the same pattern. Claude Code records this decision only
+   because the Owner explicitly instructed it to (CLAUDE.md section 1 is therefore respected).
+4. _Limited supersession._ The decision does not edit A5 or any accepted ADR text (README: "Do not edit an accepted ADR in place");
+   it states who may **execute**, prospectively, and leaves every architectural rule untouched. **Stated limit:** no repository
+   document defines precedence between an Owner governance decision recorded in the README and a frozen amendment's procedural
+   sentence; this decision is the Owner's resolution of that point, made as the authority over both, and it is submitted to the
+   consolidated independent verification below instead of being treated as self-evident.
+5. _Prospective only._ Adoption validates no earlier operation (G2-10); see section 5A for the separate ratification.
+
+**Execution authorization (GD-4 in the Owner's words: "Claude Code is authorized to: 1. Adopt G-2 through M1. 2. Record the approved
+A5 historical ratification through Path A. 3. Complete the three previously identified editorial corrections. 4. Synchronize directly
+affected governance and traceability references. 5. Create the required docs-only commits. 6. Run existing verification checks. 7. Prepare one consolidated independent Codex verification handoff."), recorded in the G2-03 format:**
+
+| Field                                       | Value                                                                                                                                                                                                                                  |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner decision and statement                | GD-1 to GD-4, quoted above and in section 5A                                                                                                                                                                                           |
+| Target record or task                       | ADR governance G-2 adoption; A5 historical ratification (section 5A); three editorial corrections                                                                                                                                      |
+| Authorized executor                         | Claude Code (Claude Sonnet 5.5)                                                                                                                                                                                                        |
+| Permitted operations                        | The seven operations listed in GD-4; docs-only commits staged by explicit path                                                                                                                                                         |
+| Reviewed content SHA / execution-start HEAD | `a83406987d336fd6767ca00dcd432198572acedb` / `e7e6c820b602b63e199c027819fc2d66a3528fa6`                                                                                                                                                |
+| Exclusions                                  | Merge, squash, rebase, force push, fetch, push and PR during this phase, architecture contract changes, implementation, deployment, edits to A5 or any accepted ADR text, edits to AGENTS.md or CLAUDE.md, the suspended Owner runbook |
+| Completion and verification                 | Documentation commits only; existing checks run; one consolidated independent verification (Codex) before documentation integration resumes                                                                                            |
+
+**Execution attribution (G2-06).** Decision authority: Engineering Owner. Execution agent: Claude Code. Execution mode:
+Owner-authorized delegation. Reviewed baseline and execution baseline: as above. **Independent verification status: PENDING** (the
+executing agent's own checks are not independent verification).
+
 ### Phase 1 - record the Owner's decisions (all five, before any Status commit)
 
 For each record R, one commit `docs(adr): record the Owner decision on <R>`, touching only R's sign-off block in this checklist,
@@ -468,3 +526,8 @@ change applied, before the first Status commit.**
    fails, stop and report the issue; do not skip, reorder or automatically repair the sequence. This rule does not change the
    approval dependencies of ADR-025, A3 or A4. The effective-policy commits of A1 and A2 (step 2) are already made and are not part
    of the batch.
+
+8. **Execution of the mechanical steps (ADR governance G-2).** The Owner decides; the Phase 1 recording and the Phase 3 steps are
+   executed either by the Owner personally or, prospectively, by an agent under a recorded Owner authorization in the G2-03 format
+   (see "Phase 0 - ADR governance G-2" and the [ADR README](README.md)). An agent never decides, and the independent verification of
+   G2-07 applies to each material bounded governance transaction. This rule changes no order or content of the steps above.
