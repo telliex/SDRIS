@@ -48,6 +48,7 @@ Defined now, approved by the Owner with D9, and applied to **every** package as 
 - **Exit evidence:** the compatibility inventory (specification 7.6) re-verified against the code at the integration base; Owner review of the contract before WP-03 starts.
 - **Risks:** widened exported union; a hidden dependency on non-validation (none found in the repository).
 - **Rollback:** revert the commits; no schema or data change exists, so rollback is complete.
+- **Status (2026-11-25):** implemented (PR #10), independently reviewed (initial REVISE at `a08c7d9`, correction `0c1962fb281104c1836fbbfc5cbe18f8771cacde`, focused re-review READY FOR OWNER ACCEPTANCE) and accepted by the Owner; FU-3 formally closed effective on integration; WP-01 implementation authorization CLOSED; WP-02 to WP-06 NOT AUTHORIZED. See the register, "WP-01 acceptance and FU-3 closure record".
 - **Commits:** (1) `test(investigation): characterise linkAttempt error precedence` (2) `feat(investigation): validate expectedVersion at the comparison position` (3) `feat(investigation): fail explicitly at version exhaustion` (4) `docs(investigation): update the linkAttempt and error-union contract comments`.
 
 ### WP-02 — Synthetic identity and trusted actor handle
