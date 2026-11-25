@@ -39,8 +39,37 @@ export type NotFoundErrorCode =
 export type InvestigationServiceError =
   | InvestigationDomainError
   | InvalidTestStageError
+  | InvalidExpectedVersionError
   | RepositoryError
   | SdrisError<NotFoundErrorCode, { readonly actual: string }>;
+
+/** Smallest and largest case version a caller may name: the PostgreSQL `integer` column starts at 1 (S0-06 FU-3). */
+const MIN_EXPECTED_VERSION = 1;
+const MAX_EXPECTED_VERSION = 2147483647;
+
+/**
+ * `linkAttempt` received an `expectedVersion` that is not a native safe integer from 1 to 2147483647 (S0-06 FU-3,
+ * specification 7.4.2). Returned as a value. `details` carries only these four keys: the raw input is never echoed,
+ * including finite numbers (Owner direction C12); `actualType` is the `typeof` tag, with `null` reported as `'null'`.
+ */
+export type InvalidExpectedVersionError = SdrisError<
+  'investigation.invalid_expected_version',
+  {
+    readonly reason: 'not_a_number' | 'not_a_safe_integer' | 'out_of_range';
+    readonly minimum: 1;
+    readonly maximum: 2147483647;
+    readonly actualType:
+      | 'number'
+      | 'string'
+      | 'bigint'
+      | 'boolean'
+      | 'object'
+      | 'undefined'
+      | 'symbol'
+      | 'function'
+      | 'null';
+  }
+>;
 
 export interface LinkResult {
   /** The case version after the operation. Unchanged for an idempotent duplicate. */
@@ -108,6 +137,30 @@ class Rollback extends Error {
   constructor(readonly failure: InvestigationServiceError) {
     super(failure.code);
   }
+}
+
+/**
+ * Runtime validation of the caller's `expectedVersion` (the type system does not protect a JavaScript caller). No
+ * coercion: only a native number that is a safe integer in [1, 2147483647] is valid. The reason is evaluated in order:
+ * not a number, then not a safe integer (NaN, infinities, fractions, unsafe integers), then out of range.
+ */
+function validateExpectedVersion(value: unknown): InvalidExpectedVersionError | undefined {
+  const actualType = value === null ? 'null' : typeof value;
+  const reject = (reason: NonNullable<InvalidExpectedVersionError['details']>['reason']) =>
+    createError({
+      code: 'investigation.invalid_expected_version' as const,
+      message: 'expectedVersion must be an integer from 1 to 2147483647.',
+      details: {
+        reason,
+        minimum: MIN_EXPECTED_VERSION,
+        maximum: MAX_EXPECTED_VERSION,
+        actualType,
+      } as const,
+    });
+  if (typeof value !== 'number') return reject('not_a_number');
+  if (!Number.isSafeInteger(value)) return reject('not_a_safe_integer');
+  if (value < MIN_EXPECTED_VERSION || value > MAX_EXPECTED_VERSION) return reject('out_of_range');
+  return undefined;
 }
 
 function notFound(code: NotFoundErrorCode, what: string, id: string) {
@@ -204,6 +257,9 @@ export function createInvestigationService(
         }
         const outcome = linkTestAttempt(current, attempt, role.value, deps.now());
         if (!outcome.ok) return err(outcome.error);
+        // FU-3 step 5: runtime validation, after existence and same-UUT, before the version comparison.
+        const invalid = validateExpectedVersion(command.expectedVersion);
+        if (invalid) return err(invalid);
         // Expected Version takes precedence over duplicate-link idempotency (Owner decision Q6).
         if (current.version !== command.expectedVersion) {
           return err(

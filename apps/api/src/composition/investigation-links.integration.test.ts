@@ -620,6 +620,80 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.deepEqual(await counts(), before);
       assert.equal(await caseVersion(c.id), 2147483647);
     });
+
+    /** S0-06 FU-3 step 5 on real PostgreSQL (specification 7.5.1 and 7.5.2). */
+    it('rejects every malformed expectedVersion with the exact contract, writes nothing and echoes nothing', async () => {
+      const { c, a } = await scenario();
+      const before = await counts();
+      const cases: Array<[unknown, string, string]> = [
+        ['3', 'not_a_number', 'string'],
+        [3n, 'not_a_number', 'bigint'],
+        [true, 'not_a_number', 'boolean'],
+        [new Number(3), 'not_a_number', 'object'],
+        [undefined, 'not_a_number', 'undefined'],
+        [null, 'not_a_number', 'null'],
+        [Number.NaN, 'not_a_safe_integer', 'number'],
+        [Number.POSITIVE_INFINITY, 'not_a_safe_integer', 'number'],
+        [2.5, 'not_a_safe_integer', 'number'],
+        [9007199254740993, 'not_a_safe_integer', 'number'],
+        [0, 'out_of_range', 'number'],
+        [-1, 'out_of_range', 'number'],
+        [2147483648, 'out_of_range', 'number'],
+      ];
+      for (const [value, reason, actualType] of cases) {
+        const result = await service.linkAttempt({
+          caseId: c.id as never,
+          attemptId: a.id as never,
+          role: 'RETEST',
+          expectedVersion: value as number,
+        });
+        assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+        assert.deepEqual(result.error.details, {
+          reason,
+          minimum: 1,
+          maximum: 2147483647,
+          actualType,
+        });
+      }
+      assert.deepEqual(await counts(), before);
+      assert.equal(await caseVersion(c.id), 1);
+    });
+
+    it('rejects an omitted expectedVersion like undefined, after the earlier checks', async () => {
+      const { c, a } = await scenario();
+      const omitted = await service.linkAttempt({
+        caseId: c.id as never,
+        attemptId: a.id as never,
+        role: 'RETEST',
+      } as never);
+      assert.ok(!omitted.ok && omitted.error.code === 'investigation.invalid_expected_version');
+      assert.equal(
+        (omitted.error.details as { actualType: string }).actualType,
+        'undefined',
+        'the omitted property is reported as undefined',
+      );
+      const unknownCase = await service.linkAttempt({
+        caseId: newEntityId<'InvestigationCase'>() as never,
+        attemptId: a.id as never,
+        role: 'RETEST',
+      } as never);
+      assert.ok(!unknownCase.ok && unknownCase.error.code === 'investigation.case_not_found');
+    });
+
+    it('an invalid value on a valid request is rejected even when the identical link exists; a valid stale value is still a conflict', async () => {
+      const { c, a } = await scenario();
+      assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
+      const invalid = await service.linkAttempt({
+        caseId: c.id as never,
+        attemptId: a.id as never,
+        role: 'RETEST',
+        expectedVersion: '2' as never,
+      });
+      assert.ok(!invalid.ok && invalid.error.code === 'investigation.invalid_expected_version');
+      const stale = await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' });
+      assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+      assert.equal(await caseVersion(c.id), 2);
+    });
   });
 
   describe('same-UUT protection', () => {

@@ -416,4 +416,177 @@ describe('InvestigationService', () => {
       assert.equal(stale.error.details?.actualVersion, MAX_VERSION);
     });
   });
+
+  /** S0-06 FU-3 step 5 (specification 7.3, 7.4.2, 7.5.1 and 7.5.2). */
+  describe('runtime expectedVersion validation (FU-3)', () => {
+    type Reason = 'not_a_number' | 'not_a_safe_integer' | 'out_of_range';
+    const cases: Array<[string, unknown, Reason, string]> = [
+      ["string '3'", '3', 'not_a_number', 'string'],
+      ['empty string', '', 'not_a_number', 'string'],
+      ['bigint 3n', 3n, 'not_a_number', 'bigint'],
+      ['true', true, 'not_a_number', 'boolean'],
+      ['false', false, 'not_a_number', 'boolean'],
+      ['boxed Number(3)', new Number(3), 'not_a_number', 'object'],
+      ['undefined', undefined, 'not_a_number', 'undefined'],
+      ['null', null, 'not_a_number', 'null'],
+      ['a Symbol', Symbol('v'), 'not_a_number', 'symbol'],
+      ['a function', () => 3, 'not_a_number', 'function'],
+      ['an array', [3], 'not_a_number', 'object'],
+      ['an object', { version: 3 }, 'not_a_number', 'object'],
+      ['NaN', Number.NaN, 'not_a_safe_integer', 'number'],
+      ['Infinity', Number.POSITIVE_INFINITY, 'not_a_safe_integer', 'number'],
+      ['-Infinity', Number.NEGATIVE_INFINITY, 'not_a_safe_integer', 'number'],
+      ['a fraction 2.5', 2.5, 'not_a_safe_integer', 'number'],
+      ['an unsafe integer', 9007199254740993, 'not_a_safe_integer', 'number'],
+      ['zero', 0, 'out_of_range', 'number'],
+      ['negative zero', -0, 'out_of_range', 'number'],
+      ['a negative number', -1, 'out_of_range', 'number'],
+      ['MAX + 1', 2147483648, 'out_of_range', 'number'],
+    ];
+    const sendWith = async (value: unknown) => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const savesBefore = store.saves;
+      const result = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: value as number,
+      });
+      return { c, result, savesBefore };
+    };
+
+    for (const [label, value, reason, actualType] of cases) {
+      it(`rejects ${label} with ${reason} and writes nothing`, async () => {
+        const { c, result, savesBefore } = await sendWith(value);
+        assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+        const details = result.error.details as Record<string, unknown>;
+        assert.deepEqual(details, { reason, minimum: 1, maximum: 2147483647, actualType });
+        assert.deepEqual(Object.keys(details).sort(), [
+          'actualType',
+          'maximum',
+          'minimum',
+          'reason',
+        ]);
+        assert.equal(store.saves, savesBefore, 'the repository was not called to save');
+        assert.equal(store.versions.get(c.id), 1);
+        assert.equal((await service.getCase(c.id))?.links.length, 0);
+      });
+    }
+
+    it('rejects the omitted property exactly like undefined', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const result = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+      } as unknown as Parameters<typeof service.linkAttempt>[0]);
+      assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+      assert.deepEqual(result.error.details, {
+        reason: 'not_a_number',
+        minimum: 1,
+        maximum: 2147483647,
+        actualType: 'undefined',
+      });
+    });
+
+    it('never echoes the raw input: the message is fixed text and details are the four fixed keys', async () => {
+      const probes: Array<[unknown, Reason, string]> = [
+        [2.5, 'not_a_safe_integer', 'number'],
+        [-1, 'out_of_range', 'number'],
+        [2147483648, 'out_of_range', 'number'],
+        [9007199254740993, 'not_a_safe_integer', 'number'],
+        ['secret-token-123', 'not_a_number', 'string'],
+        [7n, 'not_a_number', 'bigint'],
+      ];
+      const messages = new Set<string>();
+      for (const [value, reason, actualType] of probes) {
+        const { result } = await sendWith(value);
+        assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+        assert.deepEqual(result.error.details, {
+          reason,
+          minimum: 1,
+          maximum: 2147483647,
+          actualType,
+        });
+        messages.add(result.error.message);
+        assert.ok(!result.error.message.includes('secret-token-123'));
+        assert.ok(!JSON.stringify(result.error.details).includes('secret-token-123'));
+      }
+      assert.equal(messages.size, 1, 'the message does not vary with the input');
+    });
+
+    it('accepts the smallest and largest valid values as input (they then take the existing path)', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      const atMinimum = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: 1,
+      });
+      assert.ok(atMinimum.ok && atMinimum.value.created);
+      const atMaximum = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'CONTEXT',
+        expectedVersion: 2147483647,
+      });
+      assert.ok(
+        !atMaximum.ok && atMaximum.error.code === 'investigation.concurrency_conflict',
+        'a valid but stale value is a conflict, not a validation error',
+      );
+    });
+
+    it('a valid stale value still beats an identical existing link', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      assert.ok(
+        (
+          await service.linkAttempt({
+            caseId: c.id,
+            attemptId: a.id,
+            role: 'RETEST',
+            expectedVersion: 1,
+          })
+        ).ok,
+      );
+      const stale = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: 1,
+      });
+      assert.ok(!stale.ok && stale.error.code === 'investigation.concurrency_conflict');
+      assert.equal(stale.error.details?.actualVersion, 2);
+    });
+
+    it('an invalid value is also rejected when the link already exists (validation precedes the comparison and the duplicate no-op)', async () => {
+      const u = await uut();
+      const c = await open(u);
+      const a = await attemptOf(u);
+      assert.ok(
+        (
+          await service.linkAttempt({
+            caseId: c.id,
+            attemptId: a.id,
+            role: 'RETEST',
+            expectedVersion: 1,
+          })
+        ).ok,
+      );
+      const result = await service.linkAttempt({
+        caseId: c.id,
+        attemptId: a.id,
+        role: 'RETEST',
+        expectedVersion: '2' as unknown as number,
+      });
+      assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
+    });
+  });
 });
