@@ -34,7 +34,12 @@ export type NotFoundErrorCode =
 
 /**
  * Every operational error the service can return as a value (never thrown). Documented in section 12 of the
- * S0-05 specification. Unexpected failures (a lost connection, a bug) are thrown, not returned.
+ * S0-05 specification, extended by S0-06 FU-3 (specification 7): `investigation.invalid_expected_version` (the caller's
+ * `expectedVersion` is not a native safe integer from 1 to 2147483647) and `investigation.version_exhausted` (a new
+ * link needs a version past 2147483647). `investigation.concurrency_conflict` has two shapes, both unchanged: from the
+ * service's version comparison `details` is `{ expectedVersion, actualVersion }`; from the repository's atomic
+ * compare-and-save race it is `{ expectedVersion }` only, so a consumer must not assume `actualVersion` is present.
+ * Unexpected failures (a lost connection, a bug) are thrown, not returned.
  */
 export type InvestigationServiceError =
   | InvestigationDomainError
@@ -105,13 +110,19 @@ export interface InvestigationService {
    * Links an attempt to a case under the given role, for a caller that last saw the case at `expectedVersion`
    * (Owner decision Q6, mandatory). In this order:
    *
-   * 1. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
+   * 1. the role must be in the vocabulary (`invalid_link_role`);
+   * 2. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
    *    `uut_mismatch`);
-   * 2. the authoritative version is compared with `expectedVersion`; a difference is a `concurrency_conflict`, **even
+   * 3. `expectedVersion` is validated at runtime, with no coercion: only a native safe integer from 1 to 2147483647 is
+   *    accepted (`invalid_expected_version`; its `details` never contain the raw input);
+   * 4. the authoritative version is compared with `expectedVersion`; a difference is a `concurrency_conflict`, **even
    *    when the identical link already exists** (Expected Version takes precedence over idempotency);
-   * 3. when the versions match and the identical (case, attempt, role) link exists, the existing link is returned and
-   *    nothing is written (`created: false`, version unchanged);
-   * 4. when the versions match and the link is new, it is stored and the version is incremented atomically.
+   * 5. when the versions match and the identical (case, attempt, role) link exists, the existing link is returned and
+   *    nothing is written (`created: false`, version unchanged), also at the largest version;
+   * 6. when the versions match and the link is new but the case is already at 2147483647, nothing is written
+   *    (`version_exhausted`);
+   * 7. otherwise the link is stored and the version is incremented atomically; a concurrent writer that wins the
+   *    atomic update makes this one a `concurrency_conflict` (repository shape, no `actualVersion`).
    *
    * The service never retries: after a conflict the caller re-reads the case and decides again. The same attempt with
    * another role is another link.
@@ -121,7 +132,10 @@ export interface InvestigationService {
     readonly attemptId: TestAttemptId;
     /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
     readonly role: string;
-    /** The case version the caller based this request on. Required. */
+    /**
+     * The case version the caller based this request on. Required. Validated at runtime: a JavaScript caller that
+     * omits it or sends anything but a native safe integer from 1 to 2147483647 gets `invalid_expected_version`.
+     */
     readonly expectedVersion: number;
   }): Promise<Result<LinkResult, InvestigationServiceError>>;
 }
