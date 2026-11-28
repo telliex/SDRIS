@@ -136,6 +136,45 @@ describe('composeInvestigation startup (real PostgreSQL, isolated database)', ()
     );
   });
 
+  it('actual composition: a context that stops being inspectable is refused as invalid_request_context before any query (regression)', async () => {
+    const seen: ComposedSecurityEvent[] = [];
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      options((event) => seen.push(event)),
+    );
+    const good = contextFor(composed, 'fixture-engineer');
+    // The reviewer's reproduction: a real issued handle, and a context whose actor getter revokes the context
+    // before returning the handle.
+    const revocable = Proxy.revocable(
+      {},
+      {
+        get(_target, property) {
+          if (property === 'actor') {
+            revocable.revoke();
+            return good.actor;
+          }
+          return randomUUID();
+        },
+      },
+    );
+    queries = 0;
+    const result = await composed.service.getUut(
+      revocable.proxy as never,
+      newEntityId<'UUT'>() as never,
+    );
+    assert.ok(!result.ok && result.error.code === 'investigation.invalid_request_context');
+    assert.deepEqual(result.error.details, { field: 'context' });
+    assert.equal(queries, 0, 'no query and no connection checkout');
+    assert.equal(seen.length, 1, 'exactly one event');
+    assert.deepEqual(
+      Object.keys(seen[0]!).sort(),
+      ['actorId', 'at', 'command', 'event', 'reason'],
+      'redacted: fixed fields only, no correlation label',
+    );
+    assert.equal((seen[0] as { reason: string }).reason, 'invalid_context');
+  });
+
   it('actual composition: an asynchronously failing security sink never changes a refusal', async () => {
     const reports: unknown[] = [];
     const composed = composeInvestigation(

@@ -341,6 +341,58 @@ describe('access control at the service boundary', () => {
       assertUntouched();
     });
 
+    it('a context that stops being inspectable is an invalid context, not a crash (regression)', async () => {
+      // The reviewer's reproduction: the actor getter hands back a valid handle but revokes the context first, so
+      // the later shape inspection (`Array.isArray`) throws a TypeError on the revoked proxy.
+      const handle = identity.handle();
+      const revocable = Proxy.revocable(
+        {},
+        {
+          get(_target, property) {
+            if (property === 'actor') {
+              revocable.revoke();
+              return handle;
+            }
+            return randomUUID();
+          },
+        },
+      );
+      const result = await service.getUut(revocable.proxy as never, newEntityId<'UUT'>() as UutId);
+      const error = errorOf(result);
+      assert.equal(error.code, 'investigation.invalid_request_context');
+      assert.deepEqual(error.details, { field: 'context' });
+      assert.equal(log.events.length, 1, 'exactly one event');
+      assert.deepEqual(log.events[0], {
+        event: 'security.invalid_request_context',
+        at: clock(),
+        command: 'getUut',
+        reason: 'invalid_context',
+        actorId: identity.actorId(handle),
+      });
+      assert.ok(!('correlationId' in log.events[0]!), 'an uninspected label is never logged');
+      assertUntouched();
+    });
+
+    it('the same revoked context is refused by every command and read, never crashing', async () => {
+      for (const command of COMMANDS) {
+        const handle = identity.handle();
+        const revocable = Proxy.revocable(
+          {},
+          {
+            get() {
+              revocable.revoke();
+              return handle;
+            },
+          },
+        );
+        const error = errorOf(await calls[command](service, revocable.proxy as never));
+        assert.equal(error.code, 'investigation.invalid_request_context', command);
+        assert.deepEqual(error.details, { field: 'context' }, command);
+      }
+      assert.equal(log.events.length, COMMANDS.length);
+      assertUntouched();
+    });
+
     it('the correlation label is read exactly once', async () => {
       const handle = identity.handle();
       let reads = 0;

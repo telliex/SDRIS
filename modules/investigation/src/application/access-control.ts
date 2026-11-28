@@ -193,15 +193,21 @@ export function createAccessGuard(deps: {
           }),
         );
       };
-      if (typeof context !== 'object' || context === null || Array.isArray(context)) {
-        return invalidContext('context');
-      }
+      // One exception boundary for exactly the two inspections of the caller's object: its shape and its label. A
+      // context that cannot be inspected (a revoked proxy, a throwing accessor) is an invalid context, returned as a
+      // value like any other A2 failure; it is never allowed to escape as a TypeError. Nothing else is caught here.
       let correlation: unknown;
+      let inspectable = true;
       try {
-        correlation = (context as { correlationId?: unknown }).correlationId;
+        if (typeof context !== 'object' || context === null || Array.isArray(context)) {
+          inspectable = false;
+        } else {
+          correlation = (context as { correlationId?: unknown }).correlationId;
+        }
       } catch {
-        return invalidContext('context');
+        inspectable = false;
       }
+      if (!inspectable) return invalidContext('context');
       if (typeof correlation !== 'string' || !STRICT_CORRELATION.test(correlation)) {
         return invalidContext('correlationId');
       }
