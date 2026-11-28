@@ -85,6 +85,15 @@ export function composeInvestigation(
       ? error
       : new SyntheticIdentityForbiddenError();
   }
+  // The compile-time `securityEvents` property proves nothing to a JavaScript caller. Without a callable sink the
+  // service would run with a log that fails on its first event, so composition is refused here, before the issuer
+  // or the service exist, and not left to surface as a counted sink failure later. A forbidden environment has
+  // already been refused above and keeps its own error.
+  if (typeof options?.securityEvents !== 'function') {
+    throw new TypeError(
+      'composeInvestigation requires options.securityEvents, a function that receives security events.',
+    );
+  }
   const issuer = createSyntheticIssuer({
     environment,
     clock,
