@@ -107,6 +107,33 @@ describe('composeInvestigation fails closed', () => {
     }
   });
 
+  it('a pending or rejecting asynchronous sink neither delays nor changes the refusal, and nothing is touched', async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      for (const sink of [
+        () => new Promise<void>(() => undefined),
+        () => Promise.reject(new Error('sink down')),
+      ]) {
+        touched.length = 0;
+        assert.throws(
+          () =>
+            composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+              securityEvents: sink as never,
+              clock,
+            }),
+          (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+        );
+        assert.deepEqual(touched, []);
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+  });
+
   it('a throwing sink never masks the refusal', () => {
     assert.throws(
       () =>

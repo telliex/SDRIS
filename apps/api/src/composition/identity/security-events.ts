@@ -28,15 +28,28 @@ const toStandardError = (report: SinkFailureReport): void => {
 };
 
 export interface SecurityEventEmitter {
-  /** Exactly one emission attempt per call. Never throws: a failing sink never changes the caller's outcome. */
+  /**
+   * Exactly one emission attempt per call, never awaited: it returns at once and never throws, so a failing,
+   * rejecting or pending sink never changes or delays the caller's outcome.
+   */
   refuse(reason: IssuanceRefusedReason): void;
   /** How many emission attempts the sink failed (or the clock could not stamp). */
   sinkFailures(): number;
 }
 
+const isThenable = (value: unknown): value is PromiseLike<unknown> =>
+  (typeof value === 'object' || typeof value === 'function') &&
+  value !== null &&
+  typeof (value as { then?: unknown }).then === 'function';
+
 /**
  * Wraps the sink with the rule of 4.7: the refusal stands, a sink failure is reported best-effort to standard
  * error (or the injected reporter) and counted, and it is never rethrown.
+ *
+ * The callbacks are typed as plain functions but may be asynchronous, so both a synchronous throw and a rejected
+ * promise are failures. Nothing is awaited on the refusal path: a promise only gets a rejection handler, so a late
+ * rejection is counted and reported (once per attempt) without delaying the caller and without becoming an
+ * unhandled rejection. A failing reporter is contained the same way and is never reported on again.
  */
 export function createSecurityEventEmitter(options: {
   readonly sink: SecurityEventSink;
@@ -45,10 +58,26 @@ export function createSecurityEventEmitter(options: {
 }): SecurityEventEmitter {
   let failures = 0;
   const report = options.reportFailure ?? toStandardError;
+  const reportOnce = (): void => {
+    try {
+      const result: unknown = report({ event: 'security.issuance_refused' });
+      if (isThenable(result)) result.then(undefined, () => undefined);
+    } catch {
+      // best effort only: no second report, no recursion
+    }
+  };
   return {
     refuse(reason) {
+      // One attempt is one failure at most, however many ways it signals failure.
+      let failed = false;
+      const fail = (): void => {
+        if (failed) return;
+        failed = true;
+        failures += 1;
+        reportOnce();
+      };
       try {
-        options.sink(
+        const result: unknown = options.sink(
           Object.freeze({
             event: 'security.issuance_refused' as const,
             at: options.now(),
@@ -56,13 +85,9 @@ export function createSecurityEventEmitter(options: {
             reason,
           }),
         );
+        if (isThenable(result)) result.then(undefined, fail);
       } catch {
-        failures += 1;
-        try {
-          report({ event: 'security.issuance_refused' });
-        } catch {
-          // best effort only
-        }
+        fail();
       }
     },
     sinkFailures: () => failures,
