@@ -158,6 +158,82 @@ describe('synthetic issuer', () => {
       assert.equal(isPermission('investigation.root'), false);
     });
 
+    it('rejects a sparse permission array: a hole is not a permission (regression)', () => {
+      const base = syntheticPrincipalsFixture[0]!;
+      // eslint-disable-next-line no-sparse-arrays
+      const sparse = [, 'investigation.read'] as unknown as string[];
+      const holeOnly = new Array(1) as unknown as string[];
+      for (const permissions of [sparse, holeOnly]) {
+        assert.throws(
+          () => build([{ ...base, permissions }]),
+          (error) =>
+            error instanceof RangeError && !(error instanceof SyntheticIdentityForbiddenError),
+        );
+      }
+      assert.deepEqual(events, []);
+    });
+
+    it('never resolves a permission outside the closed vocabulary, whatever the input shape', () => {
+      const base = syntheticPrincipalsFixture[0]!;
+      const shapes: unknown[][] = [
+        [undefined],
+        [null],
+        ['investigation.read', undefined],
+        [7],
+        [{}],
+        ['investigation.root'],
+      ];
+      for (const permissions of shapes) {
+        assert.throws(() => build([{ ...base, permissions: permissions as string[] }]), RangeError);
+      }
+      const dense = build();
+      const resolution = dense.resolver.resolve(issueHandle('fixture-engineer', dense));
+      assert.ok(resolution.status === 'valid');
+      assert.ok(resolution.actor.permissions.every(isPermission));
+    });
+
+    it('validates and stores the same single snapshot: the caller array is read once and later changes are not seen', () => {
+      const base = syntheticPrincipalsFixture[0]!;
+      let reads = 0;
+      const answers: string[][] = [['investigation.read'], ['investigation.root']];
+      const principal = {
+        key: 'snapshot',
+        actor: base.actor,
+        actorKind: 'HUMAN' as const,
+        get permissions(): string[] {
+          const answer = answers[Math.min(reads, answers.length - 1)]!;
+          reads += 1;
+          return answer;
+        },
+      };
+      const own = build([principal]);
+      assert.equal(reads, 1, 'the permissions property was read exactly once');
+      const resolution = own.resolver.resolve(issueHandle('snapshot', own));
+      assert.ok(resolution.status === 'valid');
+      assert.deepEqual(resolution.actor.permissions, ['investigation.read']);
+    });
+
+    it('validates the elements that are stored: an array whose elements change between reads cannot slip past', () => {
+      const base = syntheticPrincipalsFixture[0]!;
+      let reads = 0;
+      const shifting = new Proxy(['investigation.read'], {
+        get(target, property, receiver) {
+          if (property === '0') {
+            reads += 1;
+            return reads === 1 ? 'investigation.read' : 'investigation.root';
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      });
+      const own = build([
+        { ...base, key: 'shifting', permissions: shifting as unknown as string[] },
+      ]);
+      assert.equal(reads, 1, 'each element is read once');
+      const resolution = own.resolver.resolve(issueHandle('shifting', own));
+      assert.ok(resolution.status === 'valid');
+      assert.deepEqual(resolution.actor.permissions, ['investigation.read']);
+    });
+
     it('rejects a malformed principal table at construction (invalid id, kind, permission, duplicate key)', () => {
       const base = syntheticPrincipalsFixture[0]!;
       const bad: unknown[] = [
