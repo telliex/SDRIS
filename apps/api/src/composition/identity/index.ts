@@ -6,7 +6,12 @@
  */
 export { SyntheticIdentityForbiddenError } from './errors';
 export { PERMISSIONS, isPermission, type Permission } from './permissions';
-export { createSecurityEventEmitter, type SecurityEventEmitter } from './security-events';
+export {
+  createGuardedSink,
+  createSecurityEventEmitter,
+  type GuardedSink,
+  type SecurityEventEmitter,
+} from './security-events';
 export type {
   IssuanceRefusedEvent,
   IssuanceRefusedReason,

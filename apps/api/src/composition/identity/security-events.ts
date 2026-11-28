@@ -20,7 +20,7 @@ export interface IssuanceRefusedEvent {
 export type SecurityEventSink = (event: IssuanceRefusedEvent) => void;
 
 export interface SinkFailureReport {
-  readonly event: IssuanceRefusedEvent['event'];
+  readonly event: string;
 }
 
 const toStandardError = (report: SinkFailureReport): void => {
@@ -43,31 +43,38 @@ const isThenable = (value: unknown): value is PromiseLike<unknown> =>
   typeof (value as { then?: unknown }).then === 'function';
 
 /**
- * Wraps the sink with the rule of 4.7: the refusal stands, a sink failure is reported best-effort to standard
- * error (or the injected reporter) and counted, and it is never rethrown.
+ * The failure containment shared by every event the application composition emits (specification 2.10 and 4.7):
+ * the rule that a sink failure is reported best-effort to standard error (or the injected reporter), counted, and
+ * never rethrown.
  *
  * The callbacks are typed as plain functions but may be asynchronous, so both a synchronous throw and a rejected
  * promise are failures. Nothing is awaited on the refusal path: a promise only gets a rejection handler, so a late
  * rejection is counted and reported (once per attempt) without delaying the caller and without becoming an
  * unhandled rejection. A failing reporter is contained the same way and is never reported on again.
  */
-export function createSecurityEventEmitter(options: {
-  readonly sink: SecurityEventSink;
-  readonly now: () => Timestamp;
+export interface GuardedSink<TEvent> {
+  /** One emission attempt; `build` runs inside the guard, so a failing clock is a sink failure too. */
+  emit(build: () => TEvent): void;
+  failures(): number;
+}
+
+export function createGuardedSink<TEvent>(options: {
+  readonly sink: (event: TEvent) => unknown;
+  readonly eventName: string;
   readonly reportFailure?: ((report: SinkFailureReport) => void) | undefined;
-}): SecurityEventEmitter {
+}): GuardedSink<TEvent> {
   let failures = 0;
   const report = options.reportFailure ?? toStandardError;
   const reportOnce = (): void => {
     try {
-      const result: unknown = report({ event: 'security.issuance_refused' });
+      const result: unknown = report({ event: options.eventName });
       if (isThenable(result)) result.then(undefined, () => undefined);
     } catch {
       // best effort only: no second report, no recursion
     }
   };
   return {
-    refuse(reason) {
+    emit(build) {
       // One attempt is one failure at most, however many ways it signals failure.
       let failed = false;
       const fail = (): void => {
@@ -77,19 +84,38 @@ export function createSecurityEventEmitter(options: {
         reportOnce();
       };
       try {
-        const result: unknown = options.sink(
-          Object.freeze({
-            event: 'security.issuance_refused' as const,
-            at: options.now(),
-            origin: 'issuer' as const,
-            reason,
-          }),
-        );
+        const result: unknown = options.sink(build());
         if (isThenable(result)) result.then(undefined, fail);
       } catch {
         fail();
       }
     },
-    sinkFailures: () => failures,
+    failures: () => failures,
+  };
+}
+
+/** The issuer's refusal events (specification 2.10), emitted through the shared guard. */
+export function createSecurityEventEmitter(options: {
+  readonly sink: SecurityEventSink;
+  readonly now: () => Timestamp;
+  readonly reportFailure?: ((report: SinkFailureReport) => void) | undefined;
+}): SecurityEventEmitter {
+  const guard = createGuardedSink<IssuanceRefusedEvent>({
+    sink: options.sink,
+    eventName: 'security.issuance_refused',
+    reportFailure: options.reportFailure,
+  });
+  return {
+    refuse(reason) {
+      guard.emit(() =>
+        Object.freeze({
+          event: 'security.issuance_refused' as const,
+          at: options.now(),
+          origin: 'issuer' as const,
+          reason,
+        }),
+      );
+    },
+    sinkFailures: guard.failures,
   };
 }
