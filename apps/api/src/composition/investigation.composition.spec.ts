@@ -173,6 +173,64 @@ describe('composeInvestigation fails closed', () => {
       });
     }
 
+    it('a securityEvents getter that throws on a forbidden environment never replaces the forbidden refusal (regression)', () => {
+      touched.length = 0;
+      let reads = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        get securityEvents(): never {
+          reads += 1;
+          throw new Error('getter down');
+        },
+      };
+      assert.throws(
+        () =>
+          composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), options as never),
+        (error) =>
+          error instanceof SyntheticIdentityForbiddenError &&
+          code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+      );
+      assert.equal(reads, 1, 'the property is looked up once');
+      assert.deepEqual(touched, [], 'nothing was constructed or touched');
+    });
+
+    it('the same throwing getter on an allowed environment is an invalid sink, not an escaped getter error', () => {
+      touched.length = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        get securityEvents(): never {
+          throw new Error('getter down');
+        },
+      };
+      assert.throws(
+        () => composeInvestigation(connectionFor(GOOD), allowed(), options as never),
+        (error) => error instanceof TypeError && /securityEvents/.test(error.message),
+      );
+      assert.deepEqual(touched, []);
+    });
+
+    it('a sink getter on a forbidden environment that is callable is still used to report, once', () => {
+      touched.length = 0;
+      const seen: IssuanceRefusedEvent[] = [];
+      let reads = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        clock,
+        get securityEvents() {
+          reads += 1;
+          return (event: IssuanceRefusedEvent) => seen.push(event);
+        },
+      };
+      assert.throws(
+        () =>
+          composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), options as never),
+        (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+      );
+      assert.equal(reads, 1);
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]!.reason, 'synthetic_forbidden');
+    });
+
     it('also refuses when the whole options object is missing', () => {
       assert.throws(
         () => composeInvestigation(connectionFor(GOOD), allowed(), undefined as never),

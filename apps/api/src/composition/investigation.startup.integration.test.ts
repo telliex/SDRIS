@@ -16,7 +16,7 @@ import {
   type ComposedSecurityEvent,
 } from './investigation.composition';
 import type { RequestContext } from '@sdris/investigation';
-import { newEntityId, type CorrelationId } from '@sdris/shared-kernel';
+import { newEntityId, timestampFromDate, type CorrelationId } from '@sdris/shared-kernel';
 
 /**
  * Paired startup verification against real PostgreSQL (S0-06 WP-02, specification 3.2, logic level; the compiled
@@ -173,6 +173,85 @@ describe('composeInvestigation startup (real PostgreSQL, isolated database)', ()
       'redacted: fixed fields only, no correlation label',
     );
     assert.equal((seen[0] as { reason: string }).reason, 'invalid_context');
+  });
+
+  it('actual composition: a securityEvents getter that changes between reads is captured once and the same sink serves both consumers (regression)', async () => {
+    const seen: ComposedSecurityEvent[] = [];
+    const recording = (event: ComposedSecurityEvent) => seen.push(event);
+    let reads = 0;
+    const optionsWithGetter = {
+      principals: syntheticPrincipalsFixture,
+      // a callable sink on the first read, nothing afterwards
+      get securityEvents() {
+        reads += 1;
+        return reads === 1 ? recording : undefined;
+      },
+    };
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      optionsWithGetter as never,
+    );
+    assert.equal(reads, 1, 'the property was read exactly once');
+    queries = 0;
+    // issuer side: an unknown principal is refused and reported through the captured sink
+    assert.deepEqual(composed.issuer.issue('nobody'), {
+      status: 'refused',
+      reason: 'unknown_principal',
+    });
+    // service side: a denied operation is reported through the same captured sink
+    const denied = await composed.service.getUut(undefined as never, newEntityId<'UUT'>() as never);
+    assert.ok(!denied.ok && denied.error.code === 'investigation.unauthenticated');
+    assert.equal(queries, 0, 'no query and no connection checkout');
+    assert.deepEqual(
+      seen.map((event) => event.event),
+      ['security.issuance_refused', 'security.unauthenticated'],
+      'both consumers delivered exactly one structured event',
+    );
+    assert.equal(composed.issuer.sinkFailures(), 0);
+    assert.equal(composed.securityLogFailures(), 0);
+    assert.equal(reads, 1, 'nothing re-read the property afterwards');
+  });
+
+  it('actual composition: every option is read exactly once and the captured values are the ones wired', async () => {
+    const reads = { principals: 0, securityEvents: 0, clock: 0, reportSinkFailure: 0 };
+    const seen: ComposedSecurityEvent[] = [];
+    const reports: unknown[] = [];
+    const instant = new Date(Date.UTC(2026, 10, 28, 9, 0, 0, 0));
+    const stamped = timestampFromDate(instant);
+    assert.ok(stamped.ok);
+    const options = {
+      get principals() {
+        reads.principals += 1;
+        return syntheticPrincipalsFixture;
+      },
+      get securityEvents() {
+        reads.securityEvents += 1;
+        return (event: ComposedSecurityEvent) => seen.push(event);
+      },
+      get clock() {
+        reads.clock += 1;
+        return () => stamped.value;
+      },
+      get reportSinkFailure() {
+        reads.reportSinkFailure += 1;
+        return (report: unknown) => reports.push(report);
+      },
+    };
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      options as never,
+    );
+    composed.issuer.issue('nobody');
+    await composed.service.getUut(undefined as never, newEntityId<'UUT'>() as never);
+    assert.deepEqual(reads, { principals: 1, securityEvents: 1, clock: 1, reportSinkFailure: 1 });
+    assert.equal(seen.length, 2);
+    assert.ok(
+      seen.every((event) => (event as { at: string }).at === instant.toISOString()),
+      'the captured clock stamped both events',
+    );
+    assert.deepEqual(reports, []);
   });
 
   it('actual composition: an asynchronously failing security sink never changes a refusal', async () => {

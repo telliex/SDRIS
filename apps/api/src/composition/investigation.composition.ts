@@ -70,17 +70,52 @@ export function composeInvestigation(
   environment: TrustedEnvironment,
   options: ComposeInvestigationOptions,
 ): ComposedInvestigation {
-  // A malformed or missing options object must not turn a refusal into a TypeError: the forbidden error comes first.
-  const clock = options?.clock ?? systemNow;
+  // Every option is read from the caller's object exactly once and only the captured outcome is used below: an
+  // accessor can answer differently on each read, so the value that is validated is the value that is wired.
+  // `securityEvents` is captured eagerly and a lookup that throws counts as "no sink", so a bad options object can
+  // never turn the forbidden-environment refusal into another error. The other options are captured on first use and
+  // a lookup that throws is not swallowed on the allowed path; on the forbidden path it only costs the report.
+  const captured = <T>(read: () => T): (() => T) => {
+    let outcome: { value: T } | { error: unknown } | undefined;
+    return () => {
+      if (outcome === undefined) {
+        try {
+          outcome = { value: read() };
+        } catch (error) {
+          outcome = { error };
+        }
+      }
+      if ('error' in outcome) throw outcome.error;
+      return outcome.value;
+    };
+  };
+  let securityEvents: ComposeInvestigationOptions['securityEvents'] | undefined;
+  try {
+    securityEvents = options?.securityEvents;
+  } catch {
+    securityEvents = undefined;
+  }
+  const clockOption = captured(() => options?.clock);
+  const reportSinkFailure = captured(() => options?.reportSinkFailure);
+  const principals = captured(() => options?.principals);
+
   try {
     assertSyntheticIdentityAllowed(environment);
     assertDisposableDatabaseTarget(environment, connection?.pool?.options?.connectionString);
   } catch (error) {
-    createSecurityEventEmitter({
-      sink: options?.securityEvents as never,
-      now: clock,
-      reportFailure: options?.reportSinkFailure,
-    }).refuse('synthetic_forbidden');
+    // Reporting is best effort and must never replace the refusal. Without a callable sink there is nothing to
+    // deliver to, and nothing is claimed as delivered.
+    try {
+      if (typeof securityEvents === 'function') {
+        createSecurityEventEmitter({
+          sink: securityEvents,
+          now: clockOption() ?? systemNow,
+          reportFailure: reportSinkFailure(),
+        }).refuse('synthetic_forbidden');
+      }
+    } catch {
+      // the refusal below stands
+    }
     throw error instanceof SyntheticIdentityForbiddenError
       ? error
       : new SyntheticIdentityForbiddenError();
@@ -89,27 +124,28 @@ export function composeInvestigation(
   // service would run with a log that fails on its first event, so composition is refused here, before the issuer
   // or the service exist, and not left to surface as a counted sink failure later. A forbidden environment has
   // already been refused above and keeps its own error.
-  if (typeof options?.securityEvents !== 'function') {
+  if (typeof securityEvents !== 'function') {
     throw new TypeError(
       'composeInvestigation requires options.securityEvents, a function that receives security events.',
     );
   }
+  const clock = clockOption() ?? systemNow;
   const issuer = createSyntheticIssuer({
     environment,
     clock,
-    principals: options.principals,
-    securityEvents: options.securityEvents,
-    reportSinkFailure: options.reportSinkFailure,
+    principals: principals() as readonly SyntheticPrincipal[],
+    securityEvents,
+    reportSinkFailure: reportSinkFailure(),
   });
   const log = createGuardedSink<SecurityEvent>({
-    sink: options.securityEvents,
+    sink: securityEvents,
     eventName: 'investigation.security_event',
-    reportFailure: options.reportSinkFailure,
+    reportFailure: reportSinkFailure(),
   });
   const module = createInvestigationModule(createPersistenceHandle(connection), {
     actorResolver: issuer.resolver,
     securityLog: { record: (event) => log.emit(() => event) },
-    ...(options.clock === undefined ? {} : { now: options.clock }),
+    ...(clockOption() === undefined ? {} : { now: clock }),
   });
   return { ...module, issuer, securityLogFailures: log.failures };
 }
