@@ -7,6 +7,7 @@ import {
   readTrustedEnvironment,
   type IssuanceRefusedEvent,
 } from './identity';
+import { syntheticPrincipalsFixture } from './identity/synthetic-principals.fixtures';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -31,6 +32,7 @@ const connectionFor = (connectionString: string | undefined): DatabaseConnection
     close: trap('close'),
   } as unknown as DatabaseConnection;
 };
+const OPTIONS = { principals: syntheticPrincipalsFixture, securityEvents: () => undefined };
 const GOOD = 'postgresql://u:p@localhost:5432/sdris_test_ab12cd34';
 
 const code = (error: unknown) => (error as SyntheticIdentityForbiddenError).code;
@@ -55,7 +57,8 @@ describe('composeInvestigation fails closed', () => {
       assert.throws(
         () =>
           composeInvestigation(connectionFor(GOOD), readTrustedEnvironment(env), {
-            securityEvents: (event) => events.push(event),
+            principals: syntheticPrincipalsFixture,
+            securityEvents: (event) => events.push(event as IssuanceRefusedEvent),
             clock,
           }),
         (error) =>
@@ -87,6 +90,7 @@ describe('composeInvestigation fails closed', () => {
           composeInvestigation(
             connectionFor(url),
             readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+            OPTIONS,
           ),
         (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
       );
@@ -101,7 +105,7 @@ describe('composeInvestigation fails closed', () => {
       undefined,
     ]) {
       assert.throws(
-        () => composeInvestigation(connectionFor(GOOD), forged as never),
+        () => composeInvestigation(connectionFor(GOOD), forged as never, OPTIONS),
         (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
       );
     }
@@ -120,6 +124,7 @@ describe('composeInvestigation fails closed', () => {
         assert.throws(
           () =>
             composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+              principals: syntheticPrincipalsFixture,
               securityEvents: sink as never,
               clock,
             }),
@@ -138,6 +143,7 @@ describe('composeInvestigation fails closed', () => {
     assert.throws(
       () =>
         composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+          principals: syntheticPrincipalsFixture,
           securityEvents: () => {
             throw new Error('sink down');
           },
@@ -152,6 +158,7 @@ describe('composeInvestigation fails closed', () => {
       composeInvestigation(
         connectionFor('postgresql://admin:hunter2@db.example.com:5432/prod'),
         readTrustedEnvironment({ SDRIS_ENV: 'secret-environment-name' }),
+        OPTIONS,
       );
       assert.fail('should have thrown');
     } catch (error) {

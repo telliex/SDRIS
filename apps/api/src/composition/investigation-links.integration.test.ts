@@ -1,17 +1,27 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { applyScripts, createPersistenceHandle, pgErrorCode } from '@sdris/database';
 import { createIsolatedDatabase, type IsolatedDatabase } from '@sdris/database/testing';
 import type {
+  AccessError,
   InvestigationCase,
   InvestigationService,
+  RequestContext,
   TestAttempt,
   Uut,
 } from '@sdris/investigation';
 import { createInvestigationModule } from '@sdris/investigation/composition';
-import { createEntityRef, newEntityId, parseTimestamp } from '@sdris/shared-kernel';
+import {
+  createEntityRef,
+  newEntityId,
+  parseTimestamp,
+  type CorrelationId,
+  type Result,
+} from '@sdris/shared-kernel';
 import { readTrustedEnvironment } from './identity';
+import { syntheticPrincipalsFixture } from './identity/synthetic-principals.fixtures';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -39,6 +49,27 @@ const causedBy = (error: unknown, pattern: RegExp): boolean => {
 describe('Investigation links through the apps/api composition root (real PostgreSQL)', () => {
   let target: IsolatedDatabase;
   let service: InvestigationService;
+  let composed: ReturnType<typeof composeInvestigation>;
+  let ctx: RequestContext;
+  const securityEvents: unknown[] = [];
+  /** Modules built directly with a custom clock or id generator still trust the same real issuer. */
+  const identityOptions = () => ({
+    actorResolver: composed.issuer.resolver,
+    securityLog: { record: () => undefined },
+  });
+  // The reads return a Result since S0-06 Stage 2; these helpers keep the existing assertions on the value.
+  const unwrap = <T>(result: Result<T, AccessError>): T => {
+    assert.ok(result.ok, JSON.stringify(result));
+    return result.value;
+  };
+  const read = {
+    getUut: async (id: Parameters<InvestigationService['getUut']>[1]) =>
+      unwrap(await service.getUut(ctx, id)),
+    getTestAttempt: async (id: Parameters<InvestigationService['getTestAttempt']>[1]) =>
+      unwrap(await service.getTestAttempt(ctx, id)),
+    getCase: async (id: Parameters<InvestigationService['getCase']>[1]) =>
+      unwrap(await service.getCase(ctx, id)),
+  };
   const sql = async (text: string, values: unknown[] = []) =>
     (await target.connection.pool.query(text, values)).rows;
   const rawCode = async (text: string, values: unknown[] = []) => {
@@ -63,7 +94,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       .version as number;
 
   const uut = async (attributes: { serialNumber?: string; hostname?: string } = {}) => {
-    const result = await service.registerUut(attributes);
+    const result = await service.registerUut(ctx, attributes);
     assert.ok(result.ok, JSON.stringify(result));
     return result.value;
   };
@@ -73,12 +104,12 @@ describe('Investigation links through the apps/api composition root (real Postgr
     return ref.value;
   };
   const attempt = async (u: Uut, stage = 'IST') => {
-    const result = await service.registerTestAttempt({ uutId: u.id, stage });
+    const result = await service.registerTestAttempt(ctx, { uutId: u.id, stage });
     assert.ok(result.ok, JSON.stringify(result));
     return result.value;
   };
   const open = async (u: Uut): Promise<InvestigationCase> => {
-    const result = await service.openCase({ uut: refOf(u) });
+    const result = await service.openCase(ctx, { uut: refOf(u) });
     assert.ok(result.ok, JSON.stringify(result));
     return result.value;
   };
@@ -87,7 +118,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
    * `expectedVersion` explicitly through `service.linkAttempt` instead.
    */
   const linkNow = async (input: { caseId: string; attemptId: string; role: string }) =>
-    service.linkAttempt({
+    service.linkAttempt(ctx, {
       caseId: input.caseId as never,
       attemptId: input.attemptId as never,
       role: input.role,
@@ -98,7 +129,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
     expectedVersion: number,
     input: { caseId: string; attemptId: string; role: string },
   ) =>
-    service.linkAttempt({
+    service.linkAttempt(ctx, {
       caseId: input.caseId as never,
       attemptId: input.attemptId as never,
       role: input.role,
@@ -113,10 +144,21 @@ describe('Investigation links through the apps/api composition root (real Postgr
   before(async () => {
     target = await createIsolatedDatabase();
     await applyScripts(target.connection.pool, 'migration', MIGRATIONS);
-    service = composeInvestigation(
+    composed = composeInvestigation(
       target.connection,
       readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
-    ).service;
+      {
+        principals: syntheticPrincipalsFixture,
+        securityEvents: (event) => securityEvents.push(event),
+      },
+    );
+    service = composed.service;
+    const issued = composed.issuer.issue('fixture-engineer');
+    assert.equal(issued.status, 'issued');
+    ctx = {
+      actor: (issued as { handle: RequestContext['actor'] }).handle,
+      correlationId: randomUUID() as CorrelationId,
+    };
   });
   after(async () => {
     await target.drop();
@@ -127,7 +169,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const a = await uut({ serialNumber: '  Sn-001 ', hostname: 'HostA' });
       const b = await uut({ serialNumber: '  Sn-001 ', hostname: 'HostA' });
       assert.notEqual(a.id, b.id);
-      const loaded = await service.getUut(a.id);
+      const loaded = await read.getUut(a.id);
       assert.equal(loaded?.serialNumber, '  Sn-001 ');
       assert.equal(loaded?.hostname, 'HostA');
       const [row] = await sql(
@@ -139,9 +181,9 @@ describe('Investigation links through the apps/api composition root (real Postgr
 
     it('keeps both identifiers optional and distinguishes an empty string from an absent value', async () => {
       const bare = await uut();
-      assert.equal((await service.getUut(bare.id))?.serialNumber, undefined);
+      assert.equal((await read.getUut(bare.id))?.serialNumber, undefined);
       const empty = await uut({ serialNumber: '' });
-      assert.equal((await service.getUut(empty.id))?.serialNumber, '');
+      assert.equal((await read.getUut(empty.id))?.serialNumber, '');
     });
 
     it('persists the timestamps of one injected application clock as UTC instants, and commands cannot override them', async () => {
@@ -159,21 +201,22 @@ describe('Investigation links through the apps/api composition root (real Postgr
         return parsed.value;
       };
       const timed = createInvestigationModule(createPersistenceHandle(target.connection), {
+        ...identityOptions(),
         now: clock,
       }).service;
       const forged = '2001-01-01T00:00:00.000Z';
       // A caller trying to choose a timestamp: extra fields are not part of any command and are ignored.
-      const u = await timed.registerUut({ createdAt: forged } as never);
+      const u = await timed.registerUut(ctx, { createdAt: forged } as never);
       assert.ok(u.ok);
-      const a = await timed.registerTestAttempt({
+      const a = await timed.registerTestAttempt(ctx, {
         uutId: u.value.id,
         stage: 'IST',
         registeredAt: forged,
       } as never);
       assert.ok(a.ok);
-      const opened = await timed.openCase({ uut: refOf(u.value), openedAt: forged } as never);
+      const opened = await timed.openCase(ctx, { uut: refOf(u.value), openedAt: forged } as never);
       assert.ok(opened.ok);
-      const linked = await timed.linkAttempt({
+      const linked = await timed.linkAttempt(ctx, {
         caseId: opened.value.id,
         attemptId: a.value.id,
         role: 'RETEST',
@@ -186,9 +229,9 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.equal(opened.value.openedAt, instants[2]);
       assert.equal(linked.value.link.linkedAt, instants[3]);
       // what is stored is exactly what the clock supplied, read back through the port, as UTC instants
-      assert.equal((await timed.getUut(u.value.id))?.createdAt, instants[0]);
-      assert.equal((await timed.getTestAttempt(a.value.id))?.registeredAt, instants[1]);
-      const loaded = await timed.getCase(opened.value.id);
+      assert.equal((await read.getUut(u.value.id))?.createdAt, instants[0]);
+      assert.equal((await read.getTestAttempt(a.value.id))?.registeredAt, instants[1]);
+      const loaded = await read.getCase(opened.value.id);
       assert.equal(loaded?.openedAt, instants[2]);
       assert.equal(loaded?.links[0]?.linkedAt, instants[3]);
       const stored = await sql(
@@ -207,34 +250,34 @@ describe('Investigation links through the apps/api composition root (real Postgr
     });
 
     it('returns undefined for an unknown UUT', async () => {
-      assert.equal(await service.getUut(newEntityId<'UUT'>()), undefined);
+      assert.equal(await read.getUut(newEntityId<'UUT'>()), undefined);
     });
 
     it('registers an attempt with stage and an optional, non-unique external execution reference', async () => {
       const u = await uut();
-      const first = await service.registerTestAttempt({
+      const first = await service.registerTestAttempt(ctx, {
         uutId: u.id,
         stage: 'SAT',
         externalExecutionReference: ' run-1 ',
       });
-      const second = await service.registerTestAttempt({
+      const second = await service.registerTestAttempt(ctx, {
         uutId: u.id,
         stage: 'SAT',
         externalExecutionReference: ' run-1 ',
       });
       assert.ok(first.ok && second.ok);
       assert.notEqual(first.value.id, second.value.id);
-      const loaded = await service.getTestAttempt(first.value.id);
+      const loaded = await read.getTestAttempt(first.value.id);
       assert.deepEqual(loaded, first.value);
       assert.equal(loaded?.externalExecutionReference, ' run-1 ');
       assert.equal(loaded?.uut.id, u.id);
-      assert.equal(await service.getTestAttempt(newEntityId<'TestAttempt'>()), undefined);
+      assert.equal(await read.getTestAttempt(newEntityId<'TestAttempt'>()), undefined);
     });
 
     it('rejects an invalid stage before anything is written', async () => {
       const u = await uut();
       const before = await counts();
-      const result = await service.registerTestAttempt({ uutId: u.id, stage: 'FCT' });
+      const result = await service.registerTestAttempt(ctx, { uutId: u.id, stage: 'FCT' });
       assert.ok(!result.ok && result.error.code === 'investigation.invalid_test_stage');
       assert.deepEqual(await counts(), before);
     });
@@ -242,11 +285,11 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('reports an unknown UUT for an attempt or a case and writes nothing', async () => {
       const before = await counts();
       const ghost = newEntityId<'UUT'>();
-      const registered = await service.registerTestAttempt({ uutId: ghost, stage: 'IST' });
+      const registered = await service.registerTestAttempt(ctx, { uutId: ghost, stage: 'IST' });
       assert.ok(!registered.ok && registered.error.code === 'investigation.uut_not_found');
       const ref = createEntityRef('UUT', ghost);
       assert.ok(ref.ok);
-      const opened = await service.openCase({ uut: ref.value });
+      const opened = await service.openCase(ctx, { uut: ref.value });
       assert.ok(!opened.ok && opened.error.code === 'investigation.uut_not_found');
       assert.deepEqual(await counts(), before);
     });
@@ -279,27 +322,29 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('refuses a duplicate id for a UUT and for an attempt, keeping the original', async () => {
       const fixedUut = newEntityId<'UUT'>();
       const module = createInvestigationModule(createPersistenceHandle(target.connection), {
+        ...identityOptions(),
         newId: <T extends string>() =>
           fixedUut as unknown as import('@sdris/shared-kernel').EntityId<T>,
       }).service;
-      const first = await module.registerUut({ serialNumber: 'ORIGINAL' });
+      const first = await module.registerUut(ctx, { serialNumber: 'ORIGINAL' });
       assert.ok(first.ok);
-      const second = await module.registerUut({ serialNumber: 'IMPOSTOR' });
+      const second = await module.registerUut(ctx, { serialNumber: 'IMPOSTOR' });
       assert.ok(!second.ok && second.error.code === 'investigation.uut_already_exists');
-      assert.equal((await service.getUut(first.value.id))?.serialNumber, 'ORIGINAL');
+      assert.equal((await read.getUut(first.value.id))?.serialNumber, 'ORIGINAL');
 
       const fixedAttempt = newEntityId<'TestAttempt'>();
       const attempts = createInvestigationModule(createPersistenceHandle(target.connection), {
+        ...identityOptions(),
         newId: <T extends string>() =>
           fixedAttempt as unknown as import('@sdris/shared-kernel').EntityId<T>,
       }).service;
-      const firstAttempt = await attempts.registerTestAttempt({
+      const firstAttempt = await attempts.registerTestAttempt(ctx, {
         uutId: first.value.id,
         stage: 'IST',
         externalExecutionReference: 'ORIGINAL-RUN',
       });
       assert.ok(firstAttempt.ok);
-      const secondAttempt = await attempts.registerTestAttempt({
+      const secondAttempt = await attempts.registerTestAttempt(ctx, {
         uutId: first.value.id,
         stage: 'SAT',
         externalExecutionReference: 'IMPOSTOR-RUN',
@@ -307,7 +352,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.ok(
         !secondAttempt.ok && secondAttempt.error.code === 'investigation.attempt_already_exists',
       );
-      const kept = await service.getTestAttempt(fixedAttempt);
+      const kept = await read.getTestAttempt(fixedAttempt);
       assert.equal(kept?.externalExecutionReference, 'ORIGINAL-RUN');
       assert.equal(kept?.stage, 'IST');
     });
@@ -330,7 +375,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         ),
         RAW_RESTRICT,
       );
-      assert.equal((await service.getUut(u.id))?.serialNumber, undefined, 'nothing was changed');
+      assert.equal((await read.getUut(u.id))?.serialNumber, undefined, 'nothing was changed');
     });
   });
 
@@ -343,7 +388,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         role: 'INITIAL_FAILURE',
       });
       assert.ok(result.ok && result.value.version === 2 && result.value.created);
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.version, 2);
       assert.equal(loaded?.links.length, 1);
       const link = loaded!.links[0]!;
@@ -390,7 +435,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         role: 'INITIAL_FAILURE',
       });
       assert.ok(more.ok && more.value.created);
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.links.length, 5);
       assert.equal(loaded?.links.filter((l) => l.role === 'INITIAL_FAILURE').length, 2);
       assert.equal(loaded?.version, 6);
@@ -406,8 +451,8 @@ describe('Investigation links through the apps/api composition root (real Postgr
           assert.ok((await linkNow({ caseId: c.id, attemptId: a.id, role: 'CONTEXT' })).ok);
         }
       }
-      assert.equal((await service.getCase(caseA.id))?.links.length, 2);
-      assert.equal((await service.getCase(caseB.id))?.links.length, 2);
+      assert.equal((await read.getCase(caseA.id))?.links.length, 2);
+      assert.equal((await read.getCase(caseB.id))?.links.length, 2);
     });
 
     it('returns links in deterministic order: registered_at, then attempt id, then role, even when timestamps are identical', async () => {
@@ -463,7 +508,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
           .sort((p, q) => rank[p[1]]! - rank[q[1]]!)
           .map(([attempt, role]) => `${attempt}/${role}`),
       ];
-      const loaded = await service.getCase(opened.id);
+      const loaded = await read.getCase(opened.id);
       assert.deepEqual(
         loaded?.links.map((l) => `${l.attemptId}/${l.role}`),
         expected,
@@ -478,7 +523,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         2,
         'two attempts really share one registered_at',
       );
-      const again = await service.getCase(opened.id);
+      const again = await read.getCase(opened.id);
       assert.deepEqual(again?.links, loaded?.links, 'stable across repeated reads');
     });
 
@@ -509,7 +554,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.equal(stale.error.details?.expectedVersion, 1);
       assert.equal(stale.error.details?.actualVersion, 2);
       assert.equal(await caseVersion(c.id), 2);
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
     });
 
     it('a stale version for a new link is a conflict that stores nothing; a version from the future is one too', async () => {
@@ -570,25 +615,25 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const before = await counts();
       for (const value of [99, Number.NaN, '3', undefined]) {
         const expectedVersion = value as number;
-        const badRole = await service.linkAttempt({
+        const badRole = await service.linkAttempt(ctx, {
           caseId: c.id as never,
           attemptId: a.id as never,
           role: 'retest',
           expectedVersion,
         });
-        const noCase = await service.linkAttempt({
+        const noCase = await service.linkAttempt(ctx, {
           caseId: newEntityId<'InvestigationCase'>() as never,
           attemptId: a.id as never,
           role: 'RETEST',
           expectedVersion,
         });
-        const noAttempt = await service.linkAttempt({
+        const noAttempt = await service.linkAttempt(ctx, {
           caseId: c.id as never,
           attemptId: newEntityId<'TestAttempt'>() as never,
           role: 'RETEST',
           expectedVersion,
         });
-        const crossUut = await service.linkAttempt({
+        const crossUut = await service.linkAttempt(ctx, {
           caseId: c.id as never,
           attemptId: foreign.id as never,
           role: 'RETEST',
@@ -645,7 +690,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         [2147483648, 'out_of_range', 'number'],
       ];
       for (const [value, reason, actualType] of cases) {
-        const result = await service.linkAttempt({
+        const result = await service.linkAttempt(ctx, {
           caseId: c.id as never,
           attemptId: a.id as never,
           role: 'RETEST',
@@ -665,7 +710,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
 
     it('rejects an omitted expectedVersion like undefined, after the earlier checks', async () => {
       const { c, a } = await scenario();
-      const omitted = await service.linkAttempt({
+      const omitted = await service.linkAttempt(ctx, {
         caseId: c.id as never,
         attemptId: a.id as never,
         role: 'RETEST',
@@ -676,7 +721,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         'undefined',
         'the omitted property is reported as undefined',
       );
-      const unknownCase = await service.linkAttempt({
+      const unknownCase = await service.linkAttempt(ctx, {
         caseId: newEntityId<'InvestigationCase'>() as never,
         attemptId: a.id as never,
         role: 'RETEST',
@@ -687,7 +732,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
     it('an invalid value on a valid request is rejected even when the identical link exists; a valid stale value is still a conflict', async () => {
       const { c, a } = await scenario();
       assert.ok((await linkAt(1, { caseId: c.id, attemptId: a.id, role: 'RETEST' })).ok);
-      const invalid = await service.linkAttempt({
+      const invalid = await service.linkAttempt(ctx, {
         caseId: c.id as never,
         attemptId: a.id as never,
         role: 'RETEST',
@@ -766,7 +811,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         });
         assert.ok(!repeat.ok && repeat.error.code === 'investigation.concurrency_conflict');
         assert.deepEqual(repeat.error.details, { expectedVersion: MAX - 1, actualVersion: MAX });
-        assert.equal((await service.getCase(c.id))?.links.length, 1);
+        assert.equal((await read.getCase(c.id))?.links.length, 1);
       });
     });
   });
@@ -798,7 +843,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       // case of another UUT, attempt UUT stored on the link
       const foreignCase = await open(other);
       assert.equal(await rawCode(insert, [foreignCase.id, a.id, c.uut.id]), RAW_FOREIGN_KEY);
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
 
     it('refuses a link whose case or attempt does not exist (foreign keys)', async () => {
@@ -847,7 +892,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       const foreign = await attempt(await uut());
       await linkNow({ caseId: c.id, attemptId: foreign.id, role: 'RETEST' });
       assert.equal(await caseVersion(c.id), 1);
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
 
     it('rolls back the version bump when storing the link fails inside the database', async () => {
@@ -867,7 +912,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         await sql('drop function investigation.reject_link()');
       }
       assert.equal(await caseVersion(c.id), 1, 'the bump was rolled back with the failed insert');
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
 
     it('rolls back a failed attempt registration, leaving no attempt behind', async () => {
@@ -880,8 +925,9 @@ describe('Investigation links through the apps/api composition root (real Postgr
         'create trigger reject_attempt before insert on investigation.test_attempt for each row execute function investigation.reject_attempt()',
       );
       try {
-        await assert.rejects(service.registerTestAttempt({ uutId: u.id, stage: 'IST' }), (error) =>
-          causedBy(error, /no attempts today/),
+        await assert.rejects(
+          service.registerTestAttempt(ctx, { uutId: u.id, stage: 'IST' }),
+          (error) => causedBy(error, /no attempts today/),
         );
       } finally {
         await sql('drop trigger reject_attempt on investigation.test_attempt');
@@ -904,7 +950,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
           .filter((r) => !r.ok)
           .every((r) => !r.ok && r.error.code === 'investigation.concurrency_conflict'),
       );
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.links.length, succeeded.length, 'one stored link per success');
       assert.equal(loaded?.version, 1 + succeeded.length);
       const versions = succeeded.map((r) => (r.ok ? r.value.version : 0)).sort((x, y) => x - y);
@@ -940,11 +986,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         other.release();
       }
       assert.equal(await caseVersion(c.id), 2, 'only the other writer advanced the version');
-      assert.equal(
-        (await service.getCase(c.id))?.links.length,
-        0,
-        'the stale writer stored nothing',
-      );
+      assert.equal((await read.getCase(c.id))?.links.length, 0, 'the stale writer stored nothing');
     });
 
     it('re-reads and re-evaluates on retry: a duplicate that lost the race becomes an idempotent no-op', async () => {
@@ -957,7 +999,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       // the caller retries, re-reading authoritative state
       const retry = await linkNow(command);
       assert.ok(retry.ok && !retry.value.created, 'already linked: idempotent');
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.links.length, 1);
       assert.equal(loaded?.version, 2, 'exactly one version increment for one distinct link');
     });
@@ -982,7 +1024,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
         }
       };
       await Promise.all(Array.from({ length: writers }, retrying));
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.links.length, writers * each);
       assert.equal(loaded?.version, 1 + writers * each);
     });
@@ -1029,7 +1071,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
 
     it('loads the case version and its links from one snapshot (no torn read)', async () => {
       const { c, a } = await scenario();
-      const loaded = await readWhileAnotherWriterCommitsALink(c, a, () => service.getCase(c.id));
+      const loaded = await readWhileAnotherWriterCommitsALink(c, a, () => read.getCase(c.id));
       assert.ok(loaded);
       assert.equal(
         loaded.version,
@@ -1170,7 +1212,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       // the loser re-reads the authoritative state (version 2) and re-evaluates: now an idempotent success
       const retry = await linkAt(2, command);
       assert.ok(retry.ok && !retry.value.created && retry.value.version === 2);
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
       assert.equal(
         await caseVersion(c.id),
         2,
@@ -1192,15 +1234,11 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.ok(loser >= 0);
       const lost = results[loser]!;
       assert.ok(!lost.ok && lost.error.code === 'investigation.concurrency_conflict');
-      assert.equal(
-        (await service.getCase(c.id))?.links.length,
-        1,
-        'the stale writer stored nothing',
-      );
+      assert.equal((await read.getCase(c.id))?.links.length, 1, 'the stale writer stored nothing');
       assert.equal(await caseVersion(c.id), 2);
       const retried = await linkAt(2, loser === 0 ? first : second);
       assert.ok(retried.ok && retried.value.created && retried.value.version === 3);
-      const loaded = await service.getCase(c.id);
+      const loaded = await read.getCase(c.id);
       assert.equal(loaded?.links.length, 2);
       assert.equal(loaded?.version, 3);
     });
@@ -1229,7 +1267,7 @@ describe('Investigation links through the apps/api composition root (real Postgr
       assert.ok(!lost.ok && lost.error.code === 'investigation.concurrency_conflict');
       assert.deepEqual(lost.error.details, { expectedVersion: 1 });
       assert.ok(!('actualVersion' in (lost.error.details ?? {})));
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
       assert.equal(await caseVersion(c.id), 2);
     });
 

@@ -1,17 +1,22 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import { applyScripts, createDatabase } from '@sdris/database';
 import { createIsolatedDatabase, type IsolatedDatabase } from '@sdris/database/testing';
 import {
   SyntheticIdentityForbiddenError,
-  createSyntheticIssuer,
   readTrustedEnvironment,
   type IssuanceRefusedEvent,
 } from './identity';
 import { syntheticPrincipalsFixture } from './identity/synthetic-principals.fixtures';
-import { composeInvestigation } from './investigation.composition';
-import { timestampFromDate } from '@sdris/shared-kernel';
+import {
+  composeInvestigation,
+  type ComposedInvestigation,
+  type ComposedSecurityEvent,
+} from './investigation.composition';
+import type { RequestContext } from '@sdris/investigation';
+import { newEntityId, type CorrelationId } from '@sdris/shared-kernel';
 
 /**
  * Paired startup verification against real PostgreSQL (S0-06 WP-02, specification 3.2, logic level; the compiled
@@ -45,40 +50,113 @@ describe('composeInvestigation startup (real PostgreSQL, isolated database)', ()
   });
 
   const events = (): IssuanceRefusedEvent[] => [];
+  const options = (sink: (event: ComposedSecurityEvent) => unknown = () => undefined) => ({
+    principals: syntheticPrincipalsFixture,
+    securityEvents: sink,
+  });
   const refuse =
     (env: Record<string, string | undefined>, sink?: (e: IssuanceRefusedEvent) => void) => () =>
-      composeInvestigation(target.connection, readTrustedEnvironment(env), {
-        ...(sink ? { securityEvents: sink } : {}),
-      });
+      composeInvestigation(
+        target.connection,
+        readTrustedEnvironment(env),
+        options(sink as ((event: ComposedSecurityEvent) => unknown) | undefined),
+      );
   const isForbidden = (error: unknown) =>
     error instanceof SyntheticIdentityForbiddenError &&
     error.code === 'SYNTHETIC_IDENTITY_FORBIDDEN';
+  const contextFor = (composed: ComposedInvestigation, key: string): RequestContext => {
+    const outcome = composed.issuer.issue(key);
+    assert.equal(outcome.status, 'issued');
+    return {
+      actor: (outcome as { handle: RequestContext['actor'] }).handle,
+      correlationId: randomUUID() as CorrelationId,
+    };
+  };
 
   it('positive control: with SDRIS_ENV=test it composes, issues a handle for an ephemeral principal and one command succeeds', async () => {
     queries = 0;
-    const environment = readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' });
-    const { service } = composeInvestigation(target.connection, environment);
-    const issued: IssuanceRefusedEvent[] = [];
-    const issuer = createSyntheticIssuer({
-      environment,
-      clock: () => {
-        const result = timestampFromDate(new Date());
-        if (!result.ok) throw new Error('clock');
-        return result.value;
-      },
-      principals: syntheticPrincipalsFixture,
-      securityEvents: (event) => issued.push(event),
-    });
-    const outcome = issuer.issue('fixture-engineer');
-    assert.equal(outcome.status, 'issued');
-    assert.equal(
-      issuer.resolver.resolve(outcome.status === 'issued' ? outcome.handle : undefined).status,
-      'valid',
+    const seen: unknown[] = [];
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      options((event) => seen.push(event)),
     );
-    const registered = await service.registerUut({ serialNumber: 'SN-STARTUP' });
+    const registered = await composed.service.registerUut(
+      contextFor(composed, 'fixture-engineer'),
+      {
+        serialNumber: 'SN-STARTUP',
+      },
+    );
     assert.ok(registered.ok, 'every other dependency is present');
     assert.ok(queries > 0, 'the positive control really used the database');
-    assert.deepEqual(issued, []);
+    assert.deepEqual(seen, [], 'an accepted call logs nothing');
+  });
+
+  it('actual composition: a denied call is refused before any query or connection checkout and is logged once', async () => {
+    const seen: ComposedSecurityEvent[] = [];
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      options((event) => seen.push(event)),
+    );
+    const id = newEntityId<'UUT'>();
+    queries = 0;
+    // no context, a forged object, a valid actor without the permission, and a malformed correlation label
+    const forged = {
+      actor: { permissions: ['investigation.uut.register'] },
+      correlationId: randomUUID(),
+    };
+    const reader = contextFor(composed, 'fixture-reader');
+    const badLabel = { ...contextFor(composed, 'fixture-engineer'), correlationId: 'free text' };
+    const results = [
+      await composed.service.registerUut(undefined as never, { serialNumber: 'X' }),
+      await composed.service.registerUut(forged as never, { serialNumber: 'X' }),
+      await composed.service.registerUut(reader, { serialNumber: 'X' }),
+      await composed.service.registerUut(badLabel as never, { serialNumber: 'X' }),
+      await composed.service.getUut(forged as never, id),
+    ];
+    assert.deepEqual(
+      results.map((r) => (r.ok ? 'ok' : r.error.code)),
+      [
+        'investigation.unauthenticated',
+        'investigation.unauthenticated',
+        'investigation.permission_denied',
+        'investigation.invalid_request_context',
+        'investigation.unauthenticated',
+      ],
+    );
+    assert.equal(queries, 0, 'no query and no connection checkout for any refusal');
+    assert.equal(seen.length, 5, 'exactly one event per refused call');
+    assert.equal(composed.securityLogFailures(), 0);
+    assert.equal(
+      (await target.connection.pool.query('select count(*)::int as n from investigation.uut'))
+        .rows[0].n,
+      1,
+      'only the positive control stored a row',
+    );
+  });
+
+  it('actual composition: an asynchronously failing security sink never changes a refusal', async () => {
+    const reports: unknown[] = [];
+    const composed = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      {
+        principals: syntheticPrincipalsFixture,
+        securityEvents: () => Promise.reject(new Error('sink down')),
+        reportSinkFailure: (report) => reports.push(report),
+      },
+    );
+    queries = 0;
+    const result = await composed.service.getCase(
+      undefined as never,
+      newEntityId<'InvestigationCase'>() as never,
+    );
+    assert.ok(!result.ok && result.error.code === 'investigation.unauthenticated');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(composed.securityLogFailures(), 1);
+    assert.equal(reports.length, 1);
+    assert.equal(queries, 0);
   });
 
   const environments: Array<[string, Record<string, string | undefined>]> = [
@@ -114,6 +192,7 @@ describe('composeInvestigation startup (real PostgreSQL, isolated database)', ()
           composeInvestigation(
             remote,
             readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+            options(),
           ),
         isForbidden,
       );

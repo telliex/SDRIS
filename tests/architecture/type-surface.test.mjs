@@ -226,17 +226,22 @@ test('the real Investigation composition entrypoint has a clean, fully typed sur
   // S0-06 WP-02 widened this list deliberately and additively: the internal resolver port and its outcome types
   // (specification 2.4) are exported as types only, so the application's issuer can implement them without
   // importing Investigation internals. They are not part of `src/public`.
+  // S0-06 WP-03 adds the Security Log port and its event types (specification 4.7), again types only, for the
+  // application's logger adapter, and makes the module options required.
   assert.deepEqual([...result.exports].sort(), [
     'ActorResolution',
     'ActorResolver',
+    'GuardedCommand',
     'InvestigationModule',
     'InvestigationModuleOptions',
+    'SecurityEvent',
+    'SecurityLog',
     'VerifiedActor',
     'createInvestigationModule',
   ]);
   assert.match(
     result.declarationText,
-    /export declare function createInvestigationModule\(persistence: PersistenceHandle, options\?: InvestigationModuleOptions\): InvestigationModule;/,
+    /export declare function createInvestigationModule\(persistence: PersistenceHandle, options: InvestigationModuleOptions\): InvestigationModule;/,
   );
   // Comments may mention these words; the declared types must not.
   const code = result.declarationText.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -260,4 +265,25 @@ test('the real Investigation public entrypoint names no persistence type at all'
   assert.deepEqual(result.leaks, [], JSON.stringify(result.leaks, null, 2));
   assert.deepEqual(result.declarationLeaks, []);
   assert.doesNotMatch(result.declarationText ?? '', /PersistenceHandle|drizzle|infrastructure/i);
+  // S0-06 WP-03: the public surface gains exactly the request context and the access error (specification 3.3)
+  // beside the opaque ActorHandle of WP-02. The resolver port, the Security Log port and the guard are internal
+  // and must not leak through the public entrypoint (they are types of the composition entrypoint only).
+  const exported = [...result.exports];
+  for (const name of ['ActorHandle', 'RequestContext', 'AccessError', 'InvestigationService']) {
+    assert.ok(exported.includes(name), `${name} must be public`);
+  }
+  for (const name of [
+    'ActorResolver',
+    'ActorResolution',
+    'VerifiedActor',
+    'SecurityLog',
+    'SecurityEvent',
+    'GuardedCommand',
+    'AccessGuard',
+    'createAccessGuard',
+    'REQUIRED_PERMISSION',
+    'createInvestigationService',
+  ]) {
+    assert.ok(!exported.includes(name), `${name} must not be public`);
+  }
 });
