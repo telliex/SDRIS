@@ -6,6 +6,7 @@ import { createIsolatedDatabase, type IsolatedDatabase } from '@sdris/database/t
 import type { InvestigationService, UutRef } from '@sdris/investigation';
 import { createInvestigationModule } from '@sdris/investigation/composition';
 import { createEntityRef, newEntityId, type EntityId } from '@sdris/shared-kernel';
+import { readTrustedEnvironment } from './identity';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -51,7 +52,10 @@ describe('Investigation case through the apps/api composition root (real Postgre
   before(async () => {
     target = await createIsolatedDatabase();
     await applyScripts(target.connection.pool, 'migration', MIGRATIONS);
-    service = composeInvestigation(target.connection).service;
+    service = composeInvestigation(
+      target.connection,
+      readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+    ).service;
   });
   after(async () => {
     await target.drop();

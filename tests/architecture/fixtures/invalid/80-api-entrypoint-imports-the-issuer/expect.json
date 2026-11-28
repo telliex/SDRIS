@@ -1,0 +1,1 @@
+{ "violations": [{ "rule": "identity/restricted-import", "file": "apps/api/src/main.ts" }] }
