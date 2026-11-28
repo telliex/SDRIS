@@ -70,16 +70,47 @@ const causedBy = (error, pattern) => {
     // Paired startup verification (specification 3.2): the positive control, then the same code, database and
     // principal list with only the environment changed. A refusal must carry code SYNTHETIC_IDENTITY_FORBIDDEN
     // and happen before any query or connection checkout.
-    const { service } = composeInvestigation(
-      target.connection,
-      environmentOf({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
-    );
-    check('composition returns a service', typeof service.linkAttempt === 'function');
     const principal = {
       key: 'compiled-runtime-principal',
       actor: { entityType: 'Actor', id: kernel.newEntityId() },
       actorKind: 'SYSTEM',
+      permissions: [
+        'investigation.uut.register',
+        'investigation.attempt.register',
+        'investigation.case.open',
+        'investigation.case.link_attempt',
+        'investigation.read',
+      ],
+    };
+    const limited = {
+      key: 'compiled-runtime-reader',
+      actor: { entityType: 'Actor', id: kernel.newEntityId() },
+      actorKind: 'SYSTEM',
       permissions: ['investigation.read'],
+    };
+    const securityEvents = [];
+    const composed = composeInvestigation(
+      target.connection,
+      environmentOf({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+      { principals: [principal, limited], securityEvents: (event) => securityEvents.push(event) },
+    );
+    const { service } = composed;
+    check('composition returns a service', typeof service.linkAttempt === 'function');
+    const handleOf = (key) => {
+      const outcome = composed.issuer.issue(key);
+      assert.equal(outcome.status, 'issued');
+      return { actor: outcome.handle, correlationId: crypto.randomUUID() };
+    };
+    const ctx = handleOf(principal.key);
+    const reader = handleOf(limited.key);
+    const unwrap = (result) => {
+      assert.ok(result.ok, JSON.stringify(result));
+      return result.value;
+    };
+    const read = {
+      getUut: async (id) => unwrap(await service.getUut(ctx, id)),
+      getTestAttempt: async (id) => unwrap(await service.getTestAttempt(ctx, id)),
+      getCase: async (id) => unwrap(await service.getCase(ctx, id)),
     };
     const issuerFor = (record) =>
       identity.createSyntheticIssuer({
@@ -112,7 +143,10 @@ const causedBy = (error, pattern) => {
       let compose;
       let issuer;
       try {
-        composeInvestigation(target.connection, environmentOf(record));
+        composeInvestigation(target.connection, environmentOf(record), {
+          principals: [principal],
+          securityEvents: () => undefined,
+        });
       } catch (error) {
         compose = error;
       }
@@ -131,8 +165,47 @@ const causedBy = (error, pattern) => {
     pool.query = realQuery;
     pool.connect = realConnect;
 
+    // Authentication and authorization through the compiled composition (S0-06 WP-03): refusals are values, are
+    // logged once each, and happen before any query or connection checkout.
+    securityEvents.length = 0;
+    let refusedQueries = 0;
+    pool.query = (...args) => ((refusedQueries += 1), realQuery(...args));
+    pool.connect = (...args) => ((refusedQueries += 1), realConnect(...args));
+    const refusals = [
+      await service.registerUut(undefined, { serialNumber: 'X' }),
+      await service.registerUut(
+        {
+          actor: { permissions: ['investigation.uut.register'] },
+          correlationId: crypto.randomUUID(),
+        },
+        { serialNumber: 'X' },
+      ),
+      await service.registerUut(reader, { serialNumber: 'X' }),
+      await service.registerUut({ ...ctx, correlationId: 'free text' }, { serialNumber: 'X' }),
+      await service.getCase(undefined, kernel.newEntityId()),
+    ];
+    pool.query = realQuery;
+    pool.connect = realConnect;
+    check(
+      'authentication and authorization refuse in order with the approved error codes',
+      refusals.map((r) => (r.ok ? 'ok' : r.error.code)).join(',') ===
+        [
+          'investigation.unauthenticated',
+          'investigation.unauthenticated',
+          'investigation.permission_denied',
+          'investigation.invalid_request_context',
+          'investigation.unauthenticated',
+        ].join(','),
+    );
+    check('refusals happened before any query or connection checkout', refusedQueries === 0);
+    check('one security event per refusal', securityEvents.length === 5);
+    check(
+      'an authorized read of a missing resource is ok(undefined), not an access error',
+      (() => true)() && (await service.getCase(ctx, kernel.newEntityId())).ok === true,
+    );
+
     const registerUut = async () => {
-      const result = await service.registerUut({ serialNumber: ' SN-SYNTHETIC ' });
+      const result = await service.registerUut(ctx, { serialNumber: ' SN-SYNTHETIC ' });
       assert.ok(result.ok);
       return result.value;
     };
@@ -146,25 +219,25 @@ const causedBy = (error, pattern) => {
     const unit = await registerUut();
     check(
       'register UUT keeps the serial number as given',
-      (await service.getUut(unit.id)).serialNumber === ' SN-SYNTHETIC ',
+      (await read.getUut(unit.id)).serialNumber === ' SN-SYNTHETIC ',
     );
-    const attempt = await service.registerTestAttempt({ uutId: unit.id, stage: 'IST' });
+    const attempt = await service.registerTestAttempt(ctx, { uutId: unit.id, stage: 'IST' });
     check(
       'register test attempt',
-      attempt.ok && (await service.getTestAttempt(attempt.value.id)).stage === 'IST',
+      attempt.ok && (await read.getTestAttempt(attempt.value.id)).stage === 'IST',
     );
-    const badStage = await service.registerTestAttempt({ uutId: unit.id, stage: 'ist' });
+    const badStage = await service.registerTestAttempt(ctx, { uutId: unit.id, stage: 'ist' });
     check(
       'invalid stage rejected',
       !badStage.ok && badStage.error.code === 'investigation.invalid_test_stage',
     );
-    const opened = await service.openCase({ uut: refOf(unit) });
+    const opened = await service.openCase(ctx, { uut: refOf(unit) });
     check('open case', opened.ok);
-    const loaded = await service.getCase(opened.value.id);
+    const loaded = await read.getCase(opened.value.id);
     check('round trip', loaded && loaded.id === opened.value.id && loaded.version === 1);
 
     // commit: version bump and link together
-    const linked = await service.linkAttempt({
+    const linked = await service.linkAttempt(ctx, {
       caseId: opened.value.id,
       attemptId: attempt.value.id,
       role: 'INITIAL_FAILURE',
@@ -174,7 +247,7 @@ const causedBy = (error, pattern) => {
     check('commit persisted both writes', (await caseCount(pool, 'case_test_attempt_link')) === 1);
 
     // idempotency: an identical repeat writes nothing and does not advance the version
-    const again = await service.linkAttempt({
+    const again = await service.linkAttempt(ctx, {
       caseId: opened.value.id,
       attemptId: attempt.value.id,
       role: 'INITIAL_FAILURE',
@@ -187,11 +260,11 @@ const causedBy = (error, pattern) => {
     check(
       'idempotent repeat changed nothing',
       (await caseCount(pool, 'case_test_attempt_link')) === 1 &&
-        (await service.getCase(opened.value.id)).version === 2,
+        (await read.getCase(opened.value.id)).version === 2,
     );
 
     // Expected Version beats idempotency: the same request at the old version 1 is a conflict although the link exists
-    const staleDuplicate = await service.linkAttempt({
+    const staleDuplicate = await service.linkAttempt(ctx, {
       caseId: opened.value.id,
       attemptId: attempt.value.id,
       role: 'INITIAL_FAILURE',
@@ -203,11 +276,11 @@ const causedBy = (error, pattern) => {
     );
 
     // cross-UUT rejection stores nothing and does not advance the version
-    const foreign = await service.registerTestAttempt({
+    const foreign = await service.registerTestAttempt(ctx, {
       uutId: (await registerUut()).id,
       stage: 'SAT',
     });
-    const crossUut = await service.linkAttempt({
+    const crossUut = await service.linkAttempt(ctx, {
       caseId: opened.value.id,
       attemptId: foreign.value.id,
       role: 'SUPPORTING',
@@ -220,7 +293,7 @@ const causedBy = (error, pattern) => {
     check(
       'cross-UUT stored nothing',
       (await caseCount(pool, 'case_test_attempt_link')) === 1 &&
-        (await service.getCase(opened.value.id)).version === 2,
+        (await read.getCase(opened.value.id)).version === 2,
     );
 
     // database-level cross-UUT protection (composite foreign keys)
@@ -242,7 +315,7 @@ const causedBy = (error, pattern) => {
     );
     try {
       await assert.rejects(
-        service.linkAttempt({
+        service.linkAttempt(ctx, {
           caseId: opened.value.id,
           attemptId: attempt.value.id,
           role: 'RETEST',
@@ -254,7 +327,7 @@ const causedBy = (error, pattern) => {
       await pool.query('drop trigger reject_link on investigation.case_test_attempt_link');
       await pool.query('drop function investigation.reject_insert()');
     }
-    check('rollback restored the version', (await service.getCase(opened.value.id)).version === 2);
+    check('rollback restored the version', (await read.getCase(opened.value.id)).version === 2);
     check('rollback stored nothing', (await caseCount(pool, 'case_test_attempt_link')) === 1);
 
     // optimistic concurrency, deterministically: a writer that read v2 must lose to a writer that reached v3
@@ -265,7 +338,7 @@ const causedBy = (error, pattern) => {
         'update investigation.investigation_case set version = version + 1 where id = $1',
         [opened.value.id],
       );
-      const stale = service.linkAttempt({
+      const stale = service.linkAttempt(ctx, {
         caseId: opened.value.id,
         attemptId: attempt.value.id,
         role: 'RETEST',
@@ -288,14 +361,14 @@ const causedBy = (error, pattern) => {
     } finally {
       other.release();
     }
-    const final = await service.getCase(opened.value.id);
+    const final = await read.getCase(opened.value.id);
     check('stale writer stored nothing', final.version === 3 && final.links.length === 1);
 
     // deterministic retrieval order: registered_at, attempt id, role
-    const second = await service.registerTestAttempt({ uutId: unit.id, stage: 'SAT' });
+    const second = await service.registerTestAttempt(ctx, { uutId: unit.id, stage: 'SAT' });
     let nextVersion = 3;
     for (const role of ['CONTEXT', 'RETEST', 'INITIAL_FAILURE']) {
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: opened.value.id,
         attemptId: second.value.id,
         role,
@@ -304,7 +377,7 @@ const causedBy = (error, pattern) => {
       assert.ok(result.ok);
       nextVersion = result.value.version;
     }
-    const ordered = (await service.getCase(opened.value.id)).links.map((l) => l.role);
+    const ordered = (await read.getCase(opened.value.id)).links.map((l) => l.role);
     check(
       'links are returned in the approved order',
       JSON.stringify(ordered) ===

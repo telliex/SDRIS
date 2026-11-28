@@ -7,6 +7,7 @@ import {
   readTrustedEnvironment,
   type IssuanceRefusedEvent,
 } from './identity';
+import { syntheticPrincipalsFixture } from './identity/synthetic-principals.fixtures';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -31,6 +32,7 @@ const connectionFor = (connectionString: string | undefined): DatabaseConnection
     close: trap('close'),
   } as unknown as DatabaseConnection;
 };
+const OPTIONS = { principals: syntheticPrincipalsFixture, securityEvents: () => undefined };
 const GOOD = 'postgresql://u:p@localhost:5432/sdris_test_ab12cd34';
 
 const code = (error: unknown) => (error as SyntheticIdentityForbiddenError).code;
@@ -55,7 +57,8 @@ describe('composeInvestigation fails closed', () => {
       assert.throws(
         () =>
           composeInvestigation(connectionFor(GOOD), readTrustedEnvironment(env), {
-            securityEvents: (event) => events.push(event),
+            principals: syntheticPrincipalsFixture,
+            securityEvents: (event) => events.push(event as IssuanceRefusedEvent),
             clock,
           }),
         (error) =>
@@ -87,6 +90,7 @@ describe('composeInvestigation fails closed', () => {
           composeInvestigation(
             connectionFor(url),
             readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
+            OPTIONS,
           ),
         (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
       );
@@ -101,7 +105,7 @@ describe('composeInvestigation fails closed', () => {
       undefined,
     ]) {
       assert.throws(
-        () => composeInvestigation(connectionFor(GOOD), forged as never),
+        () => composeInvestigation(connectionFor(GOOD), forged as never, OPTIONS),
         (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
       );
     }
@@ -120,6 +124,7 @@ describe('composeInvestigation fails closed', () => {
         assert.throws(
           () =>
             composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+              principals: syntheticPrincipalsFixture,
               securityEvents: sink as never,
               clock,
             }),
@@ -134,10 +139,130 @@ describe('composeInvestigation fails closed', () => {
     }
   });
 
+  describe('the required security event sink is validated at composition (regression)', () => {
+    const allowed = () => readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' });
+    // A principal table the issuer would reject: if the sink check really comes first, this is never reached.
+    const poisoned = [{ key: '' }] as never;
+    const invalidSinks: Array<[string, unknown]> = [
+      ['missing', undefined],
+      ['null', null],
+      ['a string', 'sink'],
+      ['a number', 7],
+      ['an object', {}],
+      ['an object with a record method', { record: () => undefined }],
+    ];
+    for (const [label, sink] of invalidSinks) {
+      it(`refuses an allowed environment whose securityEvents is ${label} before the issuer, the service or any query`, () => {
+        touched.length = 0;
+        assert.throws(
+          () =>
+            composeInvestigation(connectionFor(GOOD), allowed(), {
+              principals: poisoned,
+              securityEvents: sink as never,
+            }),
+          (error) => {
+            // not a forbidden-environment error, and not the issuer's principal error: the sink check came first
+            return (
+              error instanceof TypeError &&
+              !(error instanceof SyntheticIdentityForbiddenError) &&
+              /securityEvents/.test(error.message)
+            );
+          },
+        );
+        assert.deepEqual(touched, []);
+      });
+    }
+
+    it('a securityEvents getter that throws on a forbidden environment never replaces the forbidden refusal (regression)', () => {
+      touched.length = 0;
+      let reads = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        get securityEvents(): never {
+          reads += 1;
+          throw new Error('getter down');
+        },
+      };
+      assert.throws(
+        () =>
+          composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), options as never),
+        (error) =>
+          error instanceof SyntheticIdentityForbiddenError &&
+          code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+      );
+      assert.equal(reads, 1, 'the property is looked up once');
+      assert.deepEqual(touched, [], 'nothing was constructed or touched');
+    });
+
+    it('the same throwing getter on an allowed environment is an invalid sink, not an escaped getter error', () => {
+      touched.length = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        get securityEvents(): never {
+          throw new Error('getter down');
+        },
+      };
+      assert.throws(
+        () => composeInvestigation(connectionFor(GOOD), allowed(), options as never),
+        (error) => error instanceof TypeError && /securityEvents/.test(error.message),
+      );
+      assert.deepEqual(touched, []);
+    });
+
+    it('a sink getter on a forbidden environment that is callable is still used to report, once', () => {
+      touched.length = 0;
+      const seen: IssuanceRefusedEvent[] = [];
+      let reads = 0;
+      const options = {
+        principals: syntheticPrincipalsFixture,
+        clock,
+        get securityEvents() {
+          reads += 1;
+          return (event: IssuanceRefusedEvent) => seen.push(event);
+        },
+      };
+      assert.throws(
+        () =>
+          composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), options as never),
+        (error) => code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+      );
+      assert.equal(reads, 1);
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0]!.reason, 'synthetic_forbidden');
+    });
+
+    it('also refuses when the whole options object is missing', () => {
+      assert.throws(
+        () => composeInvestigation(connectionFor(GOOD), allowed(), undefined as never),
+        (error) => error instanceof TypeError && /securityEvents/.test(error.message),
+      );
+    });
+
+    for (const [label, sink] of invalidSinks) {
+      it(`keeps the forbidden-environment error when the sink is ${label}`, () => {
+        touched.length = 0;
+        const reports: unknown[] = [];
+        assert.throws(
+          () =>
+            composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+              principals: poisoned,
+              securityEvents: sink as never,
+              reportSinkFailure: (report) => reports.push(report),
+            }),
+          (error) =>
+            error instanceof SyntheticIdentityForbiddenError &&
+            code(error) === 'SYNTHETIC_IDENTITY_FORBIDDEN',
+        );
+        assert.deepEqual(touched, []);
+      });
+    }
+  });
+
   it('a throwing sink never masks the refusal', () => {
     assert.throws(
       () =>
         composeInvestigation(connectionFor(GOOD), readTrustedEnvironment({}), {
+          principals: syntheticPrincipalsFixture,
           securityEvents: () => {
             throw new Error('sink down');
           },
@@ -152,6 +277,7 @@ describe('composeInvestigation fails closed', () => {
       composeInvestigation(
         connectionFor('postgresql://admin:hunter2@db.example.com:5432/prod'),
         readTrustedEnvironment({ SDRIS_ENV: 'secret-environment-name' }),
+        OPTIONS,
       );
       assert.fail('should have thrown');
     } catch (error) {

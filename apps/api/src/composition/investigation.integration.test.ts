@@ -1,12 +1,25 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { after, before, describe, it } from 'node:test';
 import { applyScripts, createPersistenceHandle } from '@sdris/database';
 import { createIsolatedDatabase, type IsolatedDatabase } from '@sdris/database/testing';
-import type { InvestigationService, UutRef } from '@sdris/investigation';
+import type {
+  AccessError,
+  InvestigationService,
+  RequestContext,
+  UutRef,
+} from '@sdris/investigation';
 import { createInvestigationModule } from '@sdris/investigation/composition';
-import { createEntityRef, newEntityId, type EntityId } from '@sdris/shared-kernel';
+import {
+  createEntityRef,
+  newEntityId,
+  type CorrelationId,
+  type EntityId,
+  type Result,
+} from '@sdris/shared-kernel';
 import { readTrustedEnvironment } from './identity';
+import { syntheticPrincipalsFixture } from './identity/synthetic-principals.fixtures';
 import { composeInvestigation } from './investigation.composition';
 
 /**
@@ -32,6 +45,27 @@ const causedBy = (error: unknown, pattern: RegExp): boolean => {
 describe('Investigation case through the apps/api composition root (real PostgreSQL)', () => {
   let target: IsolatedDatabase;
   let service: InvestigationService;
+  let composed: ReturnType<typeof composeInvestigation>;
+  let ctx: RequestContext;
+  const securityEvents: unknown[] = [];
+  /** Modules built directly with a custom clock or id generator still trust the same real issuer. */
+  const identityOptions = () => ({
+    actorResolver: composed.issuer.resolver,
+    securityLog: { record: () => undefined },
+  });
+  // The reads return a Result since S0-06 Stage 2; these helpers keep the existing assertions on the value.
+  const unwrap = <T>(result: Result<T, AccessError>): T => {
+    assert.ok(result.ok, JSON.stringify(result));
+    return result.value;
+  };
+  const read = {
+    getUut: async (id: Parameters<InvestigationService['getUut']>[1]) =>
+      unwrap(await service.getUut(ctx, id)),
+    getTestAttempt: async (id: Parameters<InvestigationService['getTestAttempt']>[1]) =>
+      unwrap(await service.getTestAttempt(ctx, id)),
+    getCase: async (id: Parameters<InvestigationService['getCase']>[1]) =>
+      unwrap(await service.getCase(ctx, id)),
+  };
   const sql = async (text: string, values: unknown[] = []) =>
     (await target.connection.pool.query(text, values)).rows;
   const counts = async () => ({
@@ -42,7 +76,7 @@ describe('Investigation case through the apps/api composition root (real Postgre
   });
   /** A UUT that exists in the database (cases may only be opened for existing UUTs). */
   const registeredUut = async (): Promise<UutRef> => {
-    const result = await service.registerUut({ serialNumber: 'SN-SYNTHETIC' });
+    const result = await service.registerUut(ctx, { serialNumber: 'SN-SYNTHETIC' });
     assert.ok(result.ok, JSON.stringify(result));
     const ref = createEntityRef('UUT', result.value.id);
     if (!ref.ok) throw new Error('bad ref');
@@ -52,10 +86,21 @@ describe('Investigation case through the apps/api composition root (real Postgre
   before(async () => {
     target = await createIsolatedDatabase();
     await applyScripts(target.connection.pool, 'migration', MIGRATIONS);
-    service = composeInvestigation(
+    composed = composeInvestigation(
       target.connection,
       readTrustedEnvironment({ SDRIS_ENV: 'test', NODE_ENV: 'test' }),
-    ).service;
+      {
+        principals: syntheticPrincipalsFixture,
+        securityEvents: (event) => securityEvents.push(event),
+      },
+    );
+    service = composed.service;
+    const issued = composed.issuer.issue('fixture-engineer');
+    assert.equal(issued.status, 'issued');
+    ctx = {
+      actor: (issued as { handle: RequestContext['actor'] }).handle,
+      correlationId: randomUUID() as CorrelationId,
+    };
   });
   after(async () => {
     await target.drop();
@@ -63,9 +108,9 @@ describe('Investigation case through the apps/api composition root (real Postgre
 
   it('stores a case and reads it back through the port, with opened_at, version 1 and no links', async () => {
     const u = await registeredUut();
-    const opened = await service.openCase({ uut: u });
+    const opened = await service.openCase(ctx, { uut: u });
     assert.ok(opened.ok);
-    const loaded = await service.getCase(opened.value.id);
+    const loaded = await read.getCase(opened.value.id);
     assert.ok(loaded);
     assert.equal(loaded.id, opened.value.id);
     assert.equal(loaded.uut.id, u.id);
@@ -77,24 +122,25 @@ describe('Investigation case through the apps/api composition root (real Postgre
   it('refuses to store a second case with an id that already exists, and keeps the first untouched', async () => {
     const fixedId = newEntityId<'InvestigationCase'>();
     const fixed = createInvestigationModule(createPersistenceHandle(target.connection), {
+      ...identityOptions(),
       newId: <T extends string>() => fixedId as unknown as EntityId<T>,
     }).service;
     const sharedUut = await registeredUut();
-    const first = await fixed.openCase({ uut: sharedUut });
+    const first = await fixed.openCase(ctx, { uut: sharedUut });
     assert.ok(first.ok);
     const before = await counts();
-    const second = await fixed.openCase({ uut: sharedUut });
+    const second = await fixed.openCase(ctx, { uut: sharedUut });
     assert.ok(!second.ok && second.error.code === 'investigation.case_already_exists');
     assert.deepEqual(await counts(), before);
     assert.equal(
-      (await fixed.getCase(fixedId))?.openedAt,
+      unwrap(await fixed.getCase(ctx, fixedId))?.openedAt,
       first.value.openedAt,
       'the original case is unchanged',
     );
   });
 
   it('returns undefined for an unknown case', async () => {
-    assert.equal(await service.getCase(newEntityId<'InvestigationCase'>()), undefined);
+    assert.equal(await read.getCase(newEntityId<'InvestigationCase'>()), undefined);
   });
 
   it('rolls back a failed open, leaving no case behind', async () => {
@@ -107,7 +153,7 @@ describe('Investigation case through the apps/api composition root (real Postgre
       'create trigger reject_case before insert on investigation.investigation_case for each row execute function investigation.reject_case()',
     );
     try {
-      await assert.rejects(service.openCase({ uut: owner }), (error) =>
+      await assert.rejects(service.openCase(ctx, { uut: owner }), (error) =>
         causedBy(error, /no cases today/),
       );
     } finally {
