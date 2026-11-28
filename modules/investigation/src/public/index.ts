@@ -20,3 +20,4 @@ export type {
   LinkResult,
 } from '../application/investigation-service';
 export type { ActorHandle } from '../application/ports/actor-resolver';
+export type { AccessError, RequestContext } from '../application/access-control';

@@ -24,6 +24,13 @@ import {
   type TestAttemptId,
 } from '../domain/test-attempt';
 import { createUut, type Uut, type UutId, type UutRef } from '../domain/uut';
+import {
+  createAccessGuard,
+  type AccessError,
+  type RequestContext,
+  type SecurityLog,
+} from './access-control';
+import type { ActorResolver } from './ports/actor-resolver';
 import type { InvestigationRepository, RepositoryError } from './ports/investigation-repository';
 import type { TransactionScope } from './ports/transaction-scope';
 
@@ -46,6 +53,7 @@ export type InvestigationServiceError =
   | InvalidTestStageError
   | InvalidExpectedVersionError
   | VersionExhaustedError
+  | AccessError
   | RepositoryError
   | SdrisError<NotFoundErrorCode, { readonly actual: string }>;
 
@@ -85,32 +93,66 @@ export interface LinkResult {
   readonly created: boolean;
 }
 
-/** The application contract other layers see. Implemented by `createInvestigationService`. */
+/**
+ * The application contract other layers see. Implemented by `createInvestigationService`.
+ *
+ * **Every command and read takes a `RequestContext` first** (S0-06 Stage 2, specification 2.6 to 2.9 and 3.3) and
+ * checks, in this order and before any transaction or repository access: authentication of the actor handle
+ * (`unauthenticated`), the context and the correlation label (`invalid_request_context`), and the permission the
+ * operation needs (`permission_denied`); each refusal is returned as a value and logged once. Only then do the
+ * operation's own validation, transaction and storage run. A direct call is checked exactly like any other: a
+ * JavaScript caller that omits or forges the context is refused at runtime.
+ */
 export interface InvestigationService {
-  registerUut(command: {
-    readonly serialNumber?: string;
-    readonly hostname?: string;
-  }): Promise<Result<Uut, InvestigationServiceError>>;
-  getUut(id: UutId): Promise<Uut | undefined>;
+  /** Needs `investigation.uut.register`. */
+  registerUut(
+    context: RequestContext,
+    command: {
+      readonly serialNumber?: string;
+      readonly hostname?: string;
+    },
+  ): Promise<Result<Uut, InvestigationServiceError>>;
+  /**
+   * Needs `investigation.read`. Absence is a successful answer, `ok(undefined)`: "not found" is not an access error,
+   * and a refusal is never reported as "not found".
+   */
+  getUut(context: RequestContext, id: UutId): Promise<Result<Uut | undefined, AccessError>>;
 
-  registerTestAttempt(command: {
-    readonly uutId: UutId;
-    /** Must be one of the controlled vocabulary (`IST`, `SAT`); validated here. */
-    readonly stage: string;
-    readonly externalExecutionReference?: string;
-  }): Promise<Result<TestAttempt, InvestigationServiceError>>;
-  getTestAttempt(id: TestAttemptId): Promise<TestAttempt | undefined>;
+  /** Needs `investigation.attempt.register`. */
+  registerTestAttempt(
+    context: RequestContext,
+    command: {
+      readonly uutId: UutId;
+      /** Must be one of the controlled vocabulary (`IST`, `SAT`); validated here. */
+      readonly stage: string;
+      readonly externalExecutionReference?: string;
+    },
+  ): Promise<Result<TestAttempt, InvestigationServiceError>>;
+  /** Needs `investigation.read`; absence is `ok(undefined)`. */
+  getTestAttempt(
+    context: RequestContext,
+    id: TestAttemptId,
+  ): Promise<Result<TestAttempt | undefined, AccessError>>;
 
-  openCase(command: {
-    readonly uut: UutRef;
-  }): Promise<Result<InvestigationCase, InvestigationServiceError>>;
-  getCase(id: InvestigationCaseId): Promise<InvestigationCase | undefined>;
+  /** Needs `investigation.case.open`. */
+  openCase(
+    context: RequestContext,
+    command: {
+      readonly uut: UutRef;
+    },
+  ): Promise<Result<InvestigationCase, InvestigationServiceError>>;
+  /** Needs `investigation.read`; absence is `ok(undefined)`. */
+  getCase(
+    context: RequestContext,
+    id: InvestigationCaseId,
+  ): Promise<Result<InvestigationCase | undefined, AccessError>>;
 
   /**
    * Links an attempt to a case under the given role, for a caller that last saw the case at `expectedVersion`
-   * (Owner decision Q6, mandatory). In this order:
+   * (Owner decision Q6, mandatory). Needs `investigation.case.link_attempt`. After the access checks above, in this
+   * order:
    *
-   * 1. the role must be in the vocabulary (`invalid_link_role`);
+   * 1. the role must be in the vocabulary (`invalid_link_role`), checked before the transaction opens;
    * 2. the case and the attempt must exist and belong to the same UUT (`case_not_found`, `attempt_not_found`,
    *    `uut_mismatch`);
    * 3. `expectedVersion` is validated at runtime, with no coercion: only a native safe integer from 1 to 2147483647 is
@@ -127,20 +169,27 @@ export interface InvestigationService {
    * The service never retries: after a conflict the caller re-reads the case and decides again. The same attempt with
    * another role is another link.
    */
-  linkAttempt(command: {
-    readonly caseId: InvestigationCaseId;
-    readonly attemptId: TestAttemptId;
-    /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
-    readonly role: string;
-    /**
-     * The case version the caller based this request on. Required. Validated at runtime: a JavaScript caller that
-     * omits it or sends anything but a native safe integer from 1 to 2147483647 gets `invalid_expected_version`.
-     */
-    readonly expectedVersion: number;
-  }): Promise<Result<LinkResult, InvestigationServiceError>>;
+  linkAttempt(
+    context: RequestContext,
+    command: {
+      readonly caseId: InvestigationCaseId;
+      readonly attemptId: TestAttemptId;
+      /** Must be one of `INITIAL_FAILURE`, `RETEST`, `SUPPORTING`, `CONTEXT`; validated here. */
+      readonly role: string;
+      /**
+       * The case version the caller based this request on. Required. Validated at runtime: a JavaScript caller that
+       * omits it or sends anything but a native safe integer from 1 to 2147483647 gets `invalid_expected_version`.
+       */
+      readonly expectedVersion: number;
+    },
+  ): Promise<Result<LinkResult, InvestigationServiceError>>;
 }
 
 export interface InvestigationServiceDependencies {
+  /** Verifies actor handles. Required: the factory refuses to build a service that could skip authentication. */
+  readonly actorResolver: ActorResolver;
+  /** Receives one event per rejected call. Required: every rejection is recorded. */
+  readonly securityLog: SecurityLog;
   readonly repository: InvestigationRepository;
   readonly transactions: TransactionScope;
   readonly now: () => Timestamp;
@@ -201,6 +250,11 @@ function notFound(code: NotFoundErrorCode, what: string, id: string) {
 export function createInvestigationService(
   deps: InvestigationServiceDependencies,
 ): InvestigationService {
+  const guard = createAccessGuard({
+    actorResolver: deps.actorResolver,
+    securityLog: deps.securityLog,
+    now: deps.now,
+  });
   /** Runs `work` in one transaction; an `err` result rolls back every write it made. */
   async function transactional<T>(
     work: (
@@ -220,8 +274,10 @@ export function createInvestigationService(
   }
 
   return {
-    registerUut: (command) =>
-      transactional(async (tx) => {
+    registerUut: async (context, command) => {
+      const access = guard.authorize(context, 'registerUut');
+      if (!access.ok) return err(access.error);
+      return transactional(async (tx) => {
         const created = createUut({
           id: deps.newId<'UUT'>(),
           ...(command.serialNumber === undefined ? {} : { serialNumber: command.serialNumber }),
@@ -230,14 +286,22 @@ export function createInvestigationService(
         });
         const added = await deps.repository.addUut(created, tx);
         return added.ok ? ok(created) : err(added.error);
-      }),
+      });
+    },
 
-    getUut: (id) => deps.repository.getUut(id),
+    getUut: async (context, id) => {
+      const access = guard.authorize(context, 'getUut');
+      if (!access.ok) return err(access.error);
+      return ok(await deps.repository.getUut(id));
+    },
 
-    registerTestAttempt: (command) =>
-      transactional(async (tx) => {
-        const stage = parseTestStage(command.stage);
-        if (!stage.ok) return err(stage.error);
+    registerTestAttempt: async (context, command) => {
+      const access = guard.authorize(context, 'registerTestAttempt');
+      if (!access.ok) return err(access.error);
+      // D: pure domain validation, before the transaction opens (specification 2.7).
+      const stage = parseTestStage(command.stage);
+      if (!stage.ok) return err(stage.error);
+      return transactional(async (tx) => {
         const owner = await deps.repository.getUut(command.uutId, tx);
         if (!owner) return notFound('investigation.uut_not_found', 'UUT', command.uutId);
         const registered = registerTestAttempt({
@@ -251,12 +315,19 @@ export function createInvestigationService(
         });
         const added = await deps.repository.addTestAttempt(registered, tx);
         return added.ok ? ok(registered) : err(added.error);
-      }),
+      });
+    },
 
-    getTestAttempt: (id) => deps.repository.getTestAttempt(id),
+    getTestAttempt: async (context, id) => {
+      const access = guard.authorize(context, 'getTestAttempt');
+      if (!access.ok) return err(access.error);
+      return ok(await deps.repository.getTestAttempt(id));
+    },
 
-    openCase: (command) =>
-      transactional(async (tx) => {
+    openCase: async (context, command) => {
+      const access = guard.authorize(context, 'openCase');
+      if (!access.ok) return err(access.error);
+      return transactional(async (tx) => {
         const owner = await deps.repository.getUut(command.uut.id, tx);
         if (!owner) return notFound('investigation.uut_not_found', 'UUT', command.uut.id);
         const created = openCase({
@@ -266,14 +337,22 @@ export function createInvestigationService(
         });
         const added = await deps.repository.add(created, tx);
         return added.ok ? ok(created) : err(added.error);
-      }),
+      });
+    },
 
-    getCase: (id) => deps.repository.get(id),
+    getCase: async (context, id) => {
+      const access = guard.authorize(context, 'getCase');
+      if (!access.ok) return err(access.error);
+      return ok(await deps.repository.get(id));
+    },
 
-    linkAttempt: (command) =>
-      transactional<LinkResult>(async (tx) => {
-        const role = parseLinkRole(command.role);
-        if (!role.ok) return err(role.error);
+    linkAttempt: async (context, command) => {
+      const access = guard.authorize(context, 'linkAttempt');
+      if (!access.ok) return err(access.error);
+      // D: pure domain validation, before the transaction opens (specification 2.7).
+      const role = parseLinkRole(command.role);
+      if (!role.ok) return err(role.error);
+      return transactional<LinkResult>(async (tx) => {
         const current = await deps.repository.get(command.caseId, tx);
         if (!current) return notFound('investigation.case_not_found', 'case', command.caseId);
         const attempt = await deps.repository.getTestAttempt(command.attemptId, tx);
@@ -325,6 +404,7 @@ export function createInvestigationService(
         return saved.ok
           ? ok({ version: saved.value.version, link: outcome.value.link, created: true })
           : err(saved.error);
-      }),
+      });
+    },
   };
 }

@@ -5,10 +5,13 @@ import {
   type EntityId,
   type Timestamp,
 } from '@sdris/shared-kernel';
+import type { SecurityLog } from '../application/access-control';
+import type { ActorResolver } from '../application/ports/actor-resolver';
 import {
   createInvestigationService,
   type InvestigationService,
 } from '../application/investigation-service';
+export type { GuardedCommand, SecurityEvent, SecurityLog } from '../application/access-control';
 export type {
   ActorResolution,
   ActorResolver,
@@ -27,6 +30,16 @@ export interface InvestigationModule {
 }
 
 export interface InvestigationModuleOptions {
+  /**
+   * Verifies actor handles (S0-06 WP-03). Required: no composition can forget authentication, and the factory
+   * throws without it. The application composition root passes the issuer's resolver.
+   */
+  readonly actorResolver: ActorResolver;
+  /**
+   * Receives one event per rejected call. Required, and responsible for containing its own failures: a failing
+   * sink never changes a result (specification 4.7).
+   */
+  readonly securityLog: SecurityLog;
   /** Clock override, mainly for tests. */
   readonly now?: () => Timestamp;
   /** Identifier generator override, mainly for tests. */
@@ -42,10 +55,12 @@ function systemNow(): Timestamp {
 
 export function createInvestigationModule(
   persistence: PersistenceHandle,
-  options: InvestigationModuleOptions = {},
+  options: InvestigationModuleOptions,
 ): InvestigationModule {
   return {
     service: createInvestigationService({
+      actorResolver: options.actorResolver,
+      securityLog: options.securityLog,
       repository: new DrizzleInvestigationRepository(persistence),
       transactions: new PersistenceTransactionScope(persistence),
       now: options.now ?? systemNow,

@@ -12,7 +12,9 @@ import type { InvestigationCase, InvestigationCaseId } from '../domain/investiga
 import type { TestAttempt, TestAttemptId } from '../domain/test-attempt';
 import { timestamp } from '../domain/test-builders.spec';
 import type { Uut, UutId, UutRef } from '../domain/uut';
+import type { AccessError, RequestContext } from './access-control';
 import { createInvestigationService, type InvestigationService } from './investigation-service';
+import { FakeIdentity, RecordingSecurityLog } from './test-identity.spec';
 import type { InvestigationRepository, RepositoryError } from './ports/investigation-repository';
 import type { TransactionScope, TransactionToken } from './ports/transaction-scope';
 
@@ -97,11 +99,29 @@ const refOf = (u: Uut): UutRef => {
 describe('InvestigationService', () => {
   let store: FakeStore;
   let service: InvestigationService;
+  let identity: FakeIdentity;
+  let securityLog: RecordingSecurityLog;
+  let ctx: RequestContext;
   let tick: number;
+  // The reads return a Result since S0-06 Stage 2; these helpers keep the existing assertions on the value.
+  const unwrap = <T>(result: Result<T, AccessError>): T => {
+    assert.ok(result.ok, JSON.stringify(result));
+    return result.value;
+  };
+  const read = {
+    getUut: async (id: UutId) => unwrap(await service.getUut(ctx, id)),
+    getTestAttempt: async (id: TestAttemptId) => unwrap(await service.getTestAttempt(ctx, id)),
+    getCase: async (id: InvestigationCaseId) => unwrap(await service.getCase(ctx, id)),
+  };
   beforeEach(() => {
     store = new FakeStore();
     tick = 0;
+    identity = new FakeIdentity();
+    securityLog = new RecordingSecurityLog();
+    ctx = identity.context();
     service = createInvestigationService({
+      actorResolver: identity.resolver,
+      securityLog,
       repository: fakeRepository(store),
       transactions: fakeScope(store),
       now: () => timestamp(new Date(Date.UTC(2026, 10, 15, 10, 0, 0, tick++)).toISOString()),
@@ -109,17 +129,17 @@ describe('InvestigationService', () => {
     });
   });
   const uut = async (): Promise<Uut> => {
-    const result = await service.registerUut({ serialNumber: 'SN-1' });
+    const result = await service.registerUut(ctx, { serialNumber: 'SN-1' });
     assert.ok(result.ok);
     return result.value;
   };
   const open = async (u?: Uut): Promise<InvestigationCase> => {
-    const result = await service.openCase({ uut: refOf(u ?? (await uut())) });
+    const result = await service.openCase(ctx, { uut: refOf(u ?? (await uut())) });
     assert.ok(result.ok);
     return result.value;
   };
   const attemptOf = async (u: Uut, stage = 'IST'): Promise<TestAttempt> => {
-    const result = await service.registerTestAttempt({ uutId: u.id, stage });
+    const result = await service.registerTestAttempt(ctx, { uutId: u.id, stage });
     assert.ok(result.ok);
     return result.value;
   };
@@ -127,13 +147,13 @@ describe('InvestigationService', () => {
   describe('UUT and TestAttempt', () => {
     it('registers and retrieves a UUT, with a creation timestamp', async () => {
       const created = await uut();
-      assert.deepEqual(await service.getUut(created.id), created);
+      assert.deepEqual(await read.getUut(created.id), created);
       assert.ok(created.createdAt);
     });
 
     it('registers and retrieves an attempt of an existing UUT, with a registration timestamp', async () => {
       const u = await uut();
-      const result = await service.registerTestAttempt({
+      const result = await service.registerTestAttempt(ctx, {
         uutId: u.id,
         stage: 'SAT',
         externalExecutionReference: 'run-9',
@@ -141,18 +161,18 @@ describe('InvestigationService', () => {
       assert.ok(result.ok);
       assert.equal(result.value.stage, 'SAT');
       assert.equal(result.value.uut.id, u.id);
-      assert.deepEqual(await service.getTestAttempt(result.value.id), result.value);
+      assert.deepEqual(await read.getTestAttempt(result.value.id), result.value);
     });
 
     it('rejects a stage outside the vocabulary and stores nothing', async () => {
       const u = await uut();
-      const result = await service.registerTestAttempt({ uutId: u.id, stage: 'FCT' });
+      const result = await service.registerTestAttempt(ctx, { uutId: u.id, stage: 'FCT' });
       assert.ok(!result.ok && result.error.code === 'investigation.invalid_test_stage');
       assert.equal(store.attempts.size, 0);
     });
 
     it('reports an attempt for an unknown UUT', async () => {
-      const result = await service.registerTestAttempt({
+      const result = await service.registerTestAttempt(ctx, {
         uutId: newEntityId<'UUT'>() as UutId,
         stage: 'IST',
       });
@@ -162,7 +182,7 @@ describe('InvestigationService', () => {
     it('reports a case for an unknown UUT', async () => {
       const ghost = createEntityRef('UUT', newEntityId<'UUT'>());
       assert.ok(ghost.ok);
-      const result = await service.openCase({ uut: ghost.value });
+      const result = await service.openCase(ctx, { uut: ghost.value });
       assert.ok(!result.ok && result.error.code === 'investigation.uut_not_found');
       assert.equal(store.cases.size, 0);
     });
@@ -172,13 +192,13 @@ describe('InvestigationService', () => {
     it('opens and stores a case', async () => {
       const c = await open();
       assert.equal(store.cases.size, 1);
-      assert.deepEqual(await service.getCase(c.id), { ...c, version: 1 });
+      assert.deepEqual(await read.getCase(c.id), { ...c, version: 1 });
     });
   });
 
   describe('linking (expectedVersion is mandatory, Owner decision Q6)', () => {
     const link = (c: InvestigationCase, a: TestAttempt, role: string, expectedVersion: number) =>
-      service.linkAttempt({ caseId: c.id, attemptId: a.id, role, expectedVersion });
+      service.linkAttempt(ctx, { caseId: c.id, attemptId: a.id, role, expectedVersion });
     const versionOf = (c: InvestigationCase) => store.versions.get(c.id);
 
     it('links a new attempt at the matching version and returns the new version', async () => {
@@ -187,7 +207,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       const result = await link(c, a, 'INITIAL_FAILURE', 1);
       assert.ok(result.ok && result.value.version === 2 && result.value.created);
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
     });
 
     it('matching version and identical link: idempotent success, no write, no version increment', async () => {
@@ -229,7 +249,7 @@ describe('InvestigationService', () => {
         savesBefore,
         'the stale request never reached the repository, and was not retried',
       );
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
     });
 
     it('a version from the future is also a conflict, never a success', async () => {
@@ -262,7 +282,7 @@ describe('InvestigationService', () => {
     it('reports an unknown case', async () => {
       const u = await uut();
       const a = await attemptOf(u);
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: newEntityId<'InvestigationCase'>() as InvestigationCaseId,
         attemptId: a.id,
         role: 'CONTEXT',
@@ -273,7 +293,7 @@ describe('InvestigationService', () => {
 
     it('reports an unknown attempt', async () => {
       const c = await open();
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: newEntityId<'TestAttempt'>() as TestAttemptId,
         role: 'CONTEXT',
@@ -288,7 +308,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(await uut());
       const result = await link(c, a, 'SUPPORTING', 99);
       assert.ok(!result.ok && result.error.code === 'investigation.uut_mismatch');
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
       assert.equal(versionOf(c), 1);
     });
 
@@ -299,7 +319,7 @@ describe('InvestigationService', () => {
       store.failNextSave = 'conflict';
       const result = await link(c, a, 'RETEST', 1);
       assert.ok(!result.ok && result.error.code === 'investigation.concurrency_conflict');
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
 
     it('rolls back and rethrows an unexpected failure instead of treating it as success', async () => {
@@ -308,7 +328,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       store.failNextSave = 'throw';
       await assert.rejects(link(c, a, 'RETEST', 1), /exploded/);
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
   });
 
@@ -333,7 +353,7 @@ describe('InvestigationService', () => {
         const u = await uut();
         const c = await open(u);
         const a = await attemptOf(u);
-        const result = await service.linkAttempt({
+        const result = await service.linkAttempt(ctx, {
           caseId: c.id,
           attemptId: a.id,
           role: 'retest',
@@ -345,7 +365,7 @@ describe('InvestigationService', () => {
 
       it(`reports an unknown case before the version (${label})`, async () => {
         const a = await attemptOf(await uut());
-        const result = await service.linkAttempt({
+        const result = await service.linkAttempt(ctx, {
           caseId: newEntityId<'InvestigationCase'>() as InvestigationCaseId,
           attemptId: a.id,
           role: 'CONTEXT',
@@ -356,7 +376,7 @@ describe('InvestigationService', () => {
 
       it(`reports an unknown attempt before the version (${label})`, async () => {
         const c = await open();
-        const result = await service.linkAttempt({
+        const result = await service.linkAttempt(ctx, {
           caseId: c.id,
           attemptId: newEntityId<'TestAttempt'>() as TestAttemptId,
           role: 'CONTEXT',
@@ -368,7 +388,7 @@ describe('InvestigationService', () => {
       it(`reports a cross-UUT pair before the version (${label})`, async () => {
         const c = await open();
         const foreign = await attemptOf(await uut());
-        const result = await service.linkAttempt({
+        const result = await service.linkAttempt(ctx, {
           caseId: c.id,
           attemptId: foreign.id,
           role: 'SUPPORTING',
@@ -385,7 +405,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       assert.ok(
         (
-          await service.linkAttempt({
+          await service.linkAttempt(ctx, {
             caseId: c.id,
             attemptId: a.id,
             role: 'RETEST',
@@ -395,7 +415,7 @@ describe('InvestigationService', () => {
       );
       store.versions.set(c.id, MAX_VERSION); // test-only seeding of the stored version
       const savesBefore = store.saves;
-      const duplicate = await service.linkAttempt({
+      const duplicate = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -405,7 +425,7 @@ describe('InvestigationService', () => {
         duplicate.ok && !duplicate.value.created && duplicate.value.version === MAX_VERSION,
       );
       assert.equal(store.saves, savesBefore, 'nothing was saved');
-      const stale = await service.linkAttempt({
+      const stale = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -448,7 +468,7 @@ describe('InvestigationService', () => {
       const c = await open(u);
       const a = await attemptOf(u);
       const savesBefore = store.saves;
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -471,7 +491,7 @@ describe('InvestigationService', () => {
         ]);
         assert.equal(store.saves, savesBefore, 'the repository was not called to save');
         assert.equal(store.versions.get(c.id), 1);
-        assert.equal((await service.getCase(c.id))?.links.length, 0);
+        assert.equal((await read.getCase(c.id))?.links.length, 0);
       });
     }
 
@@ -479,11 +499,11 @@ describe('InvestigationService', () => {
       const u = await uut();
       const c = await open(u);
       const a = await attemptOf(u);
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
-      } as unknown as Parameters<typeof service.linkAttempt>[0]);
+      } as unknown as Parameters<typeof service.linkAttempt>[1]);
       assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
       assert.deepEqual(result.error.details, {
         reason: 'not_a_number',
@@ -523,14 +543,14 @@ describe('InvestigationService', () => {
       const u = await uut();
       const c = await open(u);
       const a = await attemptOf(u);
-      const atMinimum = await service.linkAttempt({
+      const atMinimum = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
         expectedVersion: 1,
       });
       assert.ok(atMinimum.ok && atMinimum.value.created);
-      const atMaximum = await service.linkAttempt({
+      const atMaximum = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'CONTEXT',
@@ -548,7 +568,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       assert.ok(
         (
-          await service.linkAttempt({
+          await service.linkAttempt(ctx, {
             caseId: c.id,
             attemptId: a.id,
             role: 'RETEST',
@@ -556,7 +576,7 @@ describe('InvestigationService', () => {
           })
         ).ok,
       );
-      const stale = await service.linkAttempt({
+      const stale = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -572,7 +592,7 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       assert.ok(
         (
-          await service.linkAttempt({
+          await service.linkAttempt(ctx, {
             caseId: c.id,
             attemptId: a.id,
             role: 'RETEST',
@@ -580,7 +600,7 @@ describe('InvestigationService', () => {
           })
         ).ok,
       );
-      const result = await service.linkAttempt({
+      const result = await service.linkAttempt(ctx, {
         caseId: c.id,
         attemptId: a.id,
         role: 'RETEST',
@@ -594,7 +614,7 @@ describe('InvestigationService', () => {
   describe('version exhaustion (FU-3)', () => {
     const MAX_VERSION = 2147483647;
     const linkAt = (c: InvestigationCase, a: TestAttempt, role: string, expectedVersion: number) =>
-      service.linkAttempt({ caseId: c.id, attemptId: a.id, role, expectedVersion });
+      service.linkAttempt(ctx, { caseId: c.id, attemptId: a.id, role, expectedVersion });
     const caseAtMaximum = async () => {
       const u = await uut();
       const c = await open(u);
@@ -616,7 +636,7 @@ describe('InvestigationService', () => {
       });
       assert.equal(store.saves, savesBefore, 'no write was attempted');
       assert.equal(store.versions.get(c.id), MAX_VERSION);
-      assert.equal((await service.getCase(c.id))?.links.length, 1);
+      assert.equal((await read.getCase(c.id))?.links.length, 1);
     });
 
     it('another role for an already linked attempt is a new link and is also exhausted', async () => {
@@ -698,13 +718,13 @@ describe('InvestigationService', () => {
       const a = await attemptOf(u);
       const { command, counter } = accessorCommand(c, a, 'RETEST', [2, 1]);
       const savesBefore = store.saves;
-      const result = await service.linkAttempt(command);
+      const result = await service.linkAttempt(ctx, command);
       assert.equal(counter.reads, 1, 'the accessor was read exactly once');
       assert.ok(!result.ok && result.error.code === 'investigation.concurrency_conflict');
       assert.deepEqual(result.error.details, { expectedVersion: 2, actualVersion: 1 });
       assert.equal(store.saves, savesBefore, 'the repository was never asked to save');
       assert.equal(store.versions.get(c.id), 1);
-      assert.equal((await service.getCase(c.id))?.links.length, 0);
+      assert.equal((await read.getCase(c.id))?.links.length, 0);
     });
 
     it('an invalid captured value is rejected from that one read (first read invalid, later reads valid)', async () => {
@@ -712,7 +732,7 @@ describe('InvestigationService', () => {
       const c = await open(u);
       const a = await attemptOf(u);
       const { command, counter } = accessorCommand(c, a, 'RETEST', ['3', 1]);
-      const result = await service.linkAttempt(command);
+      const result = await service.linkAttempt(ctx, command);
       assert.equal(counter.reads, 1);
       assert.ok(!result.ok && result.error.code === 'investigation.invalid_expected_version');
       assert.equal(store.versions.get(c.id), 1);
@@ -737,10 +757,10 @@ describe('InvestigationService', () => {
         [1],
       );
       const crossUut = accessorCommand(c, foreign, 'RETEST', [1]);
-      assert.ok(!(await service.linkAttempt(badRole.command)).ok);
-      assert.ok(!(await service.linkAttempt(noCase.command)).ok);
-      assert.ok(!(await service.linkAttempt(noAttempt.command)).ok);
-      assert.ok(!(await service.linkAttempt(crossUut.command)).ok);
+      assert.ok(!(await service.linkAttempt(ctx, badRole.command)).ok);
+      assert.ok(!(await service.linkAttempt(ctx, noCase.command)).ok);
+      assert.ok(!(await service.linkAttempt(ctx, noAttempt.command)).ok);
+      assert.ok(!(await service.linkAttempt(ctx, crossUut.command)).ok);
       for (const { counter } of [badRole, noCase, noAttempt, crossUut]) {
         assert.equal(counter.reads, 0, 'expectedVersion is not read before step 5');
       }
