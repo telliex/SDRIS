@@ -93,13 +93,19 @@ function snapshotPrincipals(principals: readonly SyntheticPrincipal[]): Map<stri
     if (principal.actorKind !== 'HUMAN' && principal.actorKind !== 'SYSTEM') {
       throw new RangeError('a principal actorKind must be HUMAN or SYSTEM');
     }
-    if (!Array.isArray(principal.permissions) || !principal.permissions.every(isPermission)) {
+    // Read the caller's property once and copy it into an owned dense array: `Array.from` turns a hole into an
+    // explicit `undefined`, so validation sees every slot (`every` alone skips holes), and the exact values that are
+    // validated are the values that are normalized and stored. The caller's array is never read again.
+    const rawPermissions: unknown = principal.permissions;
+    if (!Array.isArray(rawPermissions)) {
       throw new RangeError('principal permissions must come from the closed vocabulary');
     }
-    // Sorted, de-duplicated, frozen copy: no caller-owned references survive.
-    const permissions = Object.freeze(
-      [...new Set(principal.permissions as readonly Permission[])].sort(),
-    );
+    const captured: unknown[] = Array.from(rawPermissions);
+    if (!captured.every(isPermission)) {
+      throw new RangeError('principal permissions must come from the closed vocabulary');
+    }
+    // Sorted, de-duplicated, frozen copy of the validated snapshot: no caller-owned references survive.
+    const permissions = Object.freeze([...new Set(captured as Permission[])].sort());
     table.set(
       key,
       Object.freeze({
